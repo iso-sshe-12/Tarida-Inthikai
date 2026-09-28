@@ -1,0 +1,6 @@
+{
+  "name": "น้องออดิต - AI Mock Auditor K.R.C.",
+  "description": "ระบบผู้ช่วยผู้เชี่ยวชาญ AI สำหรับตรวจติดตามภายใน (Mock Internal Audit) ตรวจสอบหลักฐาน ประเมินข้อบกพร่อง และร่างแผนแก้ไข CAP/CAR สำหรับ บจก. เค.อาร์.ซี. ทรานสปอร์ต แอนด์ เซอร์วิส ตามมาตรฐาน ISO 9001/14001/45001 และกฎหมายความปลอดภัยไทย",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

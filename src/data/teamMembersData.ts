@@ -1,0 +1,77 @@
+import { TeamMember, NotificationConfig } from '../types/audit';
+
+export const DEFAULT_TEAM_MEMBERS: TeamMember[] = [
+  {
+    id: 'user-admin-1',
+    name: 'ประภาส สันติสุข',
+    role: 'ADMIN',
+    department: 'ฝ่าย QSHE & ระบบบริหารคุณภาพ',
+    email: 'iso-sshe@krctrans.com',
+    avatarBg: 'bg-indigo-600',
+    assignedCategories: ['ALL'],
+  },
+  {
+    id: 'user-approver-1',
+    name: 'กิตติศักดิ์ เจริญกิจ',
+    role: 'ADMIN',
+    department: 'ผู้บริหารระดับสูง (President & CEO)',
+    email: 'ceo@krctrans.com',
+    avatarBg: 'bg-slate-800',
+    assignedCategories: ['ALL'],
+  },
+  {
+    id: 'user-auditor-ai',
+    name: 'น้องออดิต (AI Lead Auditor)',
+    role: 'AUDITOR',
+    department: 'ทีมตรวจประเมินอิสระ (Lead Auditor)',
+    email: 'nong-audit@krctrans.com',
+    avatarBg: 'bg-blue-600',
+    assignedCategories: ['ALL'],
+  },
+  {
+    id: 'user-auditor-safety',
+    name: 'สมบัติ มั่นคง (จป.วิชาชีพ)',
+    role: 'AUDITOR',
+    department: 'ฝ่ายความปลอดภัย อาชีวอนามัย และสิ่งแวดล้อม',
+    email: 'safety@krctrans.com',
+    avatarBg: 'bg-amber-600',
+    assignedCategories: ['ช', 'ฌ'],
+  },
+  {
+    id: 'user-auditee-depot',
+    name: 'วิชัย ชัยชนะ',
+    role: 'AUDITEE',
+    department: 'แผนกปฏิบัติการลานตู้ & ซ่อมบำรุง',
+    email: 'depot.sup@krctrans.com',
+    avatarBg: 'bg-emerald-600',
+    assignedCategories: ['ช', 'ซ'],
+  },
+  {
+    id: 'user-auditee-transport',
+    name: 'อนุชา ขับขี่ปลอดภัย',
+    role: 'AUDITEE',
+    department: 'แผนกปฏิบัติการขนส่ง & พนักงานขับรถ (พขร.)',
+    email: 'transport.sup@krctrans.com',
+    avatarBg: 'bg-teal-600',
+    assignedCategories: ['ฌ'],
+  },
+  {
+    id: 'user-auditee-vendor',
+    name: 'ตัวแทนผู้รับเหมาซ่อมตู้และพ่นสี',
+    role: 'AUDITEE',
+    department: 'บริษัท ผู้รับเหมาช่วงประจำลาน (Contractor P-PU-002)',
+    email: 'vendor.contractor@service.com',
+    avatarBg: 'bg-orange-600',
+    assignedCategories: ['ซ'],
+  },
+];
+
+export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
+  googleChatWebhookUrl: '',
+  googleChatEnabled: true,
+  emailEnabled: true,
+  adminEmail: 'iso-sshe@krctrans.com',
+  notifyOnCarIssued: true,
+  notifyOnAuditeeSubmitted: true,
+  notifyOnCarClosed: true,
+};
