@@ -14,6 +14,7 @@ import { TeamManagementModal } from './components/TeamManagementModal';
 import { TeamManagementTab } from './components/TeamManagementTab';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { DatabaseSettingsModal } from './components/DatabaseSettingsModal';
+import { LoginModal } from './components/LoginModal';
 import { INITIAL_CHECKLIST_DATA, ChecklistItem } from './data/auditChecklistData';
 import { MOCK_SCENARIOS, MockScenario } from './data/mockScenarios';
 import { DEFAULT_AUDIT_SCHEDULE } from './data/auditScheduleData';
@@ -63,6 +64,8 @@ const STORAGE_KEY_MEMBERS = 'krc_audit_team_members_v1';
 const STORAGE_KEY_NOTIF = 'krc_audit_notif_config_v1';
 const STORAGE_KEY_NOTIF_LOGS = 'krc_audit_notif_logs_v1';
 const STORAGE_KEY_SCHEDULE = 'krc_audit_schedule_v1';
+const STORAGE_KEY_LOGGED_IN_EMAIL = 'krc_audit_logged_in_email_v1';
+const STORAGE_KEY_SELECTED_PERSPECTIVE = 'krc_audit_selected_perspective_v1';
 
 export default function App() {
   // Initialize with the realistic pre-audit scenario
@@ -131,7 +134,17 @@ export default function App() {
   const [activeScenario, setActiveScenario] = useState<MockScenario>(defaultScenario);
   const [activeTab, setActiveTab] = useState<'SCHEDULE' | 'CHECKLIST' | 'EVIDENCE' | 'EXPLAINER' | 'SUMMARY' | 'TEAM'>('SCHEDULE');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [roleMode, setRoleMode] = useState<'AUDITOR' | 'AUDITEE'>('AUDITOR');
+  const [roleMode, setRoleMode] = useState<'AUDITOR' | 'AUDITEE'>(() => {
+    try {
+      const savedPerspective = localStorage.getItem(STORAGE_KEY_SELECTED_PERSPECTIVE);
+      if (savedPerspective === 'AUDITOR' || savedPerspective === 'AUDITEE') {
+        return savedPerspective;
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+    return 'AUDITOR';
+  });
 
   // Audit Schedule State
   const [auditSchedule, setAuditSchedule] = useState<AuditPlanEntry[]>(() => {
@@ -228,7 +241,36 @@ export default function App() {
     return DEFAULT_TEAM_MEMBERS;
   });
 
-  const [currentUser, setCurrentUser] = useState<TeamMember>(() => teamMembers[0] || DEFAULT_TEAM_MEMBERS[0]);
+  const [currentUser, setCurrentUser] = useState<TeamMember>(() => {
+    try {
+      const savedEmail = localStorage.getItem(STORAGE_KEY_LOGGED_IN_EMAIL);
+      if (savedEmail) {
+        const found = teamMembers.find((m) => m.email.toLowerCase() === savedEmail.toLowerCase());
+        if (found) return found;
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+    return teamMembers[0] || DEFAULT_TEAM_MEMBERS[0];
+  });
+
+  // Persist email & currentUser changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, currentUser.email);
+    } catch (e) {
+      console.warn(e);
+    }
+  }, [currentUser]);
+
+  // Persist selected perspective
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SELECTED_PERSPECTIVE, roleMode);
+    } catch (e) {
+      console.warn(e);
+    }
+  }, [roleMode]);
 
   // Notifications state
   const [notificationConfig, setNotificationConfig] = useState<NotificationConfig>(() => {
@@ -282,6 +324,7 @@ export default function App() {
   }, [notificationConfig, notificationLogs]);
 
   // Modals state
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState<boolean>(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [targetUploadDepartment, setTargetUploadDepartment] = useState<string>('ALL');
@@ -409,6 +452,11 @@ export default function App() {
   // Switch persona handler
   const handleSwitchCurrentUser = (member: TeamMember) => {
     setCurrentUser(member);
+    try {
+      localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, member.email);
+    } catch (e) {
+      console.warn(e);
+    }
     if (member.role === 'AUDITEE') {
       setRoleMode('AUDITEE');
     } else {
@@ -416,6 +464,97 @@ export default function App() {
     }
     setToastMessage(`สลับผู้ใช้งานเป็น: ${member.name} (${member.role})`);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Login with Email Handler (Supports choosing perspective Auditor / Auditee, except Admin)
+  const handleLoginWithEmail = (email: string, perspective?: 'AUDITOR' | 'AUDITEE') => {
+    const clean = email.trim().toLowerCase();
+    const found = teamMembers.find((m) => m.email.trim().toLowerCase() === clean);
+    if (found) {
+      setCurrentUser(found);
+      try {
+        localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, found.email);
+      } catch (e) {
+        console.warn(e);
+      }
+
+      // If Admin: full access, default to perspective or AUDITOR
+      // If Non-Admin: uses the perspective selected by user!
+      let targetRoleMode: 'AUDITOR' | 'AUDITEE' = 'AUDITOR';
+      if (found.role === 'ADMIN') {
+        targetRoleMode = perspective || 'AUDITOR';
+      } else {
+        targetRoleMode = perspective || (found.role === 'AUDITEE' ? 'AUDITEE' : 'AUDITOR');
+      }
+
+      setRoleMode(targetRoleMode);
+      try {
+        localStorage.setItem(STORAGE_KEY_SELECTED_PERSPECTIVE, targetRoleMode);
+      } catch (e) {
+        console.warn(e);
+      }
+
+      const perspectiveLabel =
+        targetRoleMode === 'AUDITOR' ? '🛡️ มุมมอง Auditor (ผู้ตรวจประเมิน)' : '👥 มุมมอง Auditee (ผู้รับการตรวจ)';
+
+      setToastMessage(
+        found.role === 'ADMIN'
+          ? `✓ ยินดีต้อนรับ Admin คุณ${found.name} (สิทธิ์เต็ม - เข้าใช้งานใน${perspectiveLabel})`
+          : `✓ ยินดีต้อนรับ คุณ${found.name} เข้าสู่ระบบใน "${perspectiveLabel}" เรียบร้อยแล้ว!`
+      );
+      setTimeout(() => setToastMessage(null), 3500);
+      return { success: true, message: 'เข้าสู่ระบบสำเร็จ', user: found };
+    }
+
+    return {
+      success: false,
+      message: `ไม่พบอีเมล "${email}" ในฐานข้อมูลระบบ K.R.C.`,
+    };
+  };
+
+  // Quick Register and Login Handler
+  const handleRegisterAndLogin = (newMember: TeamMember, perspective?: 'AUDITOR' | 'AUDITEE') => {
+    setTeamMembers((prev) => {
+      const updated = [newMember, ...prev.filter((m) => m.email.toLowerCase() !== newMember.email.toLowerCase())];
+      try {
+        localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(updated));
+      } catch (e) {
+        console.warn(e);
+      }
+      return updated;
+    });
+
+    setCurrentUser(newMember);
+    try {
+      localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, newMember.email);
+    } catch (e) {
+      console.warn(e);
+    }
+
+    const targetMode = perspective || (newMember.role === 'AUDITEE' ? 'AUDITEE' : 'AUDITOR');
+    setRoleMode(targetMode);
+    try {
+      localStorage.setItem(STORAGE_KEY_SELECTED_PERSPECTIVE, targetMode);
+    } catch (e) {
+      console.warn(e);
+    }
+
+    setToastMessage(
+      `✓ ลงทะเบียน "${newMember.name}" เข้าสู่ฐานข้อมูล และเข้าใช้งานใน ${targetMode === 'AUDITOR' ? '🛡️ มุมมอง Auditor' : '👥 มุมมอง Auditee'} สำเร็จ!`
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Logout Handler
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_LOGGED_IN_EMAIL);
+    } catch (e) {
+      console.warn(e);
+    }
+    setToastMessage('ออกจากระบบเรียบร้อยแล้ว');
+    setIsLoginModalOpen(true);
+    setTimeout(() => setToastMessage(null), 2500);
   };
 
   // Notification Handler (Google Chat & Email)
@@ -717,6 +856,7 @@ export default function App() {
         onOpenTeamModal={() => setIsTeamModalOpen(true)}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
         onOpenDatabaseModal={handleOpenDatabaseModal}
+        onOpenLoginModal={() => setIsLoginModalOpen(true)}
         isSheetsConnected={sheetsConfig.isConnected}
         activeScenarioTitle={activeScenario?.title}
         totalFindingsCount={totalFindingsCount}
@@ -902,6 +1042,8 @@ export default function App() {
             onOpenTeamModal={() => {
               setActiveTab('TEAM');
             }}
+            currentUser={currentUser}
+            onOpenLoginModal={() => setIsLoginModalOpen(true)}
           />
         )}
 
@@ -1011,6 +1153,17 @@ export default function App() {
         onSaveConfig={setNotificationConfig}
         logs={notificationLogs}
         onTriggerTestNotification={handleTriggerTestNotification}
+      />
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        currentUser={currentUser}
+        teamMembers={teamMembers}
+        onLoginWithEmail={handleLoginWithEmail}
+        onRegisterAndLogin={handleRegisterAndLogin}
+        onLogout={handleLogout}
+        currentRoleMode={roleMode}
       />
 
       <DatabaseSettingsModal

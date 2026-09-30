@@ -12,6 +12,9 @@ import {
   Bell,
   User,
   Database,
+  LogIn,
+  Mail,
+  Lock,
 } from 'lucide-react';
 import { TeamMember } from '../types/audit';
 
@@ -21,6 +24,7 @@ interface HeaderProps {
   onOpenTeamModal: () => void;
   onOpenNotificationModal: () => void;
   onOpenDatabaseModal: () => void;
+  onOpenLoginModal?: () => void;
   isSheetsConnected?: boolean;
   activeScenarioTitle?: string;
   totalFindingsCount: number;
@@ -36,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTeamModal,
   onOpenNotificationModal,
   onOpenDatabaseModal,
+  onOpenLoginModal,
   isSheetsConnected = false,
   activeScenarioTitle,
   totalFindingsCount,
@@ -84,11 +89,22 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Controls, Role Switcher, Team & Notification Buttons */}
           <div className="flex items-center flex-wrap gap-2">
-            {/* Active User Badge & Team Modal Trigger */}
+            {/* Login with Email / Switch Account Button */}
             <button
-              onClick={onOpenTeamModal}
+              onClick={onOpenLoginModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-98 border border-blue-400/60 text-xs font-bold text-white shadow-sm transition cursor-pointer"
+              title="เข้าสู่ระบบด้วยอีเมลเพื่อรับสิทธิ์ Auditor หรือ Auditee ตามฐานข้อมูล K.R.C."
+            >
+              <LogIn className="w-3.5 h-3.5 text-blue-200" />
+              <span className="hidden sm:inline">เข้าสู่ระบบด้วย Email</span>
+              <span className="sm:hidden">Login Email</span>
+            </button>
+
+            {/* Active User Badge */}
+            <button
+              onClick={onOpenLoginModal || onOpenTeamModal}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition cursor-pointer"
-              title="คลิกเพื่อจัดการทีม Auditor & Auditee หรือเปลี่ยนสิทธิ์ผู้ใช้งาน"
+              title={`คลิกเพื่อสลับผู้ใช้ หรือดูสิทธิ์ (${currentUser.email})`}
             >
               <div
                 className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold text-white ${
@@ -97,11 +113,21 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 {currentUser.name.charAt(0)}
               </div>
-              <span className="max-w-[100px] truncate font-semibold">{currentUser.name}</span>
-              <span className="text-[10px] text-amber-300 font-mono">({currentUser.role})</span>
+              <span className="max-w-[110px] truncate font-semibold">{currentUser.name}</span>
+              <span
+                className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                  currentUser.role === 'ADMIN'
+                    ? 'bg-indigo-900/80 text-indigo-300 border-indigo-500/50'
+                    : currentUser.role === 'AUDITOR'
+                    ? 'bg-blue-900/80 text-blue-300 border-blue-500/50'
+                    : 'bg-emerald-900/80 text-emerald-300 border-emerald-500/50'
+                }`}
+              >
+                {currentUser.role}
+              </span>
             </button>
 
-            {/* Role Switcher Pill */}
+            {/* Perspective Switcher Pill */}
             <div className="inline-flex rounded-lg p-0.5 bg-slate-800/90 border border-slate-700 shadow-inner">
               <button
                 onClick={() => onToggleRole('AUDITOR')}
@@ -110,7 +136,11 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="สลับเป็นมุมมองผู้ตรวจประเมิน Lead Auditor"
+                title={
+                  currentUser.role === 'ADMIN'
+                    ? 'Admin: สลับเป็นมุมมองผู้ตรวจประเมิน Lead Auditor'
+                    : 'เข้าใช้งานในมุมมองผู้ตรวจประเมิน (Auditor)'
+                }
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
                 <span className="hidden sm:inline">Auditor</span>
@@ -123,7 +153,11 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="สลับเป็นมุมมองผู้รับการตรวจ Auditee สำหรับตอบและส่งหลักฐาน"
+                title={
+                  currentUser.role === 'ADMIN'
+                    ? 'Admin: สลับเป็นมุมมองผู้รับการตรวจ Auditee'
+                    : 'เข้าใช้งานในมุมมองผู้รับการตรวจ (Auditee)'
+                }
               >
                 <UserCheck className="w-3.5 h-3.5 text-emerald-200" />
                 <span>Auditee</span>

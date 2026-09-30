@@ -40,6 +40,9 @@ import {
   Table2,
   LayoutList,
   FileText,
+  Lock,
+  LogIn,
+  Mail,
 } from 'lucide-react';
 
 interface ChecklistTabProps {
@@ -61,6 +64,8 @@ interface ChecklistTabProps {
   selectedDepartment?: string;
   onSelectDepartment?: (deptId: string) => void;
   onOpenTeamModal?: () => void;
+  currentUser?: import('../types/audit').TeamMember;
+  onOpenLoginModal?: () => void;
 }
 
 export const ChecklistTab: React.FC<ChecklistTabProps> = ({
@@ -82,6 +87,8 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
   selectedDepartment,
   onSelectDepartment,
   onOpenTeamModal,
+  currentUser,
+  onOpenLoginModal,
 }) => {
   const [internalDept, setInternalDept] = useState<string>('ALL');
   const activeDept = selectedDepartment !== undefined ? selectedDepartment : internalDept;
@@ -648,7 +655,7 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
                   roleMode === 'AUDITEE'
                     ? 'bg-emerald-400 text-slate-950 font-black'
@@ -656,18 +663,31 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                 }`}>
                   {roleMode === 'AUDITEE' ? 'โหมดผู้รับการตรวจ (Auditee Portal)' : 'โหมด Lead Auditor'}
                 </span>
-                <span className="text-xs font-semibold">
-                  {roleMode === 'AUDITEE'
-                    ? 'พื้นที่สำหรับทีมหน้างาน & ผู้รับเหมาตอบข้อซักถามและอัปโหลดภาพถ่ายหลักฐาน'
-                    : 'พื้นที่ประเมินผล ตัดสินเกรด C/NC และออกใบ CAR'}
-                </span>
+                {currentUser && (
+                  <span className="text-xs font-bold text-amber-200 flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded-lg border border-white/10">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>ผู้ใช้งาน: {currentUser.name}</span>
+                    <span className="text-[10px] text-slate-300 font-mono">({currentUser.department})</span>
+                  </span>
+                )}
+                {onOpenLoginModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenLoginModal}
+                    className="text-[11px] text-blue-200 hover:text-white underline font-semibold flex items-center gap-1 cursor-pointer"
+                    title="เข้าสู่ระบบด้วยอีเมล หรือสลับสิทธิ์ผู้ใช้งาน"
+                  >
+                    <LogIn className="w-3 h-3" />
+                    <span>สลับสิทธิ์ / Login</span>
+                  </button>
+                )}
               </div>
-              <p className={`text-xs mt-0.5 ${
-                roleMode === 'AUDITEE' ? 'text-emerald-100/80' : 'text-slate-500'
+              <p className={`text-xs mt-1 ${
+                roleMode === 'AUDITEE' ? 'text-emerald-100/90' : 'text-slate-300'
               }`}>
                 {roleMode === 'AUDITEE'
-                  ? '👉 ในแต่ละข้อตรวจ ให้คลิกปุ่มสีเขียว "📸 Auditee ตอบ & แนบหลักฐาน" เพื่อพิมพ์คำชี้แจงและถ่ายรูปหน้างาน'
-                  : 'ตรวจสอบคำชี้แจงและรูปภาพที่ Auditee ส่งมา จากนั้นกด "ให้น้องออดิตประเมินแทนฉัน" เพื่อตัดสินผลตรวจ'}
+                  ? '👉 สิทธิ์ Auditee ในฐานข้อมูล: ตรวจสอบข้อคำถาม ตอบคำชี้แจง และอัปโหลดภาพถ่ายหลักฐานหน้างาน (ระบบล็อคการประเมินคะแนน C/NC ไว้ให้เฉพาะผู้ตรวจ)'
+                  : '👉 สิทธิ์ Auditor: ตรวจสอบหลักฐานหน้างานของ Auditee, ประเมินคะแนน C/NC, เรียกน้องออดิต AI ช่วยวิเคราะห์ และออกใบ CAR'}
               </p>
             </div>
           </div>
@@ -676,14 +696,30 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
           {onToggleRole && (
             <div className="inline-flex rounded-xl p-1 bg-black/20 border border-white/10 shrink-0 self-start sm:self-auto">
               <button
-                onClick={() => onToggleRole('AUDITOR')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  roleMode === 'AUDITOR'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white'
+                disabled={currentUser?.role === 'AUDITEE'}
+                onClick={() => {
+                  if (currentUser?.role !== 'AUDITEE') {
+                    onToggleRole('AUDITOR');
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                  currentUser?.role === 'AUDITEE'
+                    ? 'text-slate-500 cursor-not-allowed opacity-50'
+                    : roleMode === 'AUDITOR'
+                    ? 'bg-blue-600 text-white shadow-sm cursor-pointer'
+                    : 'text-slate-300 hover:text-white cursor-pointer'
                 }`}
+                title={
+                  currentUser?.role === 'AUDITEE'
+                    ? 'ล็อคสิทธิ์ตามฐานข้อมูล: บัญชีของคุณเป็น Auditee ไม่สามารถสลับเป็นผู้ตรวจประเมินได้'
+                    : 'สลับเป็นมุมมอง Auditor'
+                }
               >
-                <ShieldCheck className="w-3.5 h-3.5" />
+                {currentUser?.role === 'AUDITEE' ? (
+                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                ) : (
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                )}
                 <span>มุมมอง Auditor</span>
               </button>
               <button
@@ -693,6 +729,7 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                     ? 'bg-emerald-600 text-white shadow-sm'
                     : 'text-slate-300 hover:text-white'
                 }`}
+                title="สลับเป็นมุมมอง Auditee สำหรับส่งหลักฐาน"
               >
                 <UserCheck className="w-3.5 h-3.5" />
                 <span>มุมมอง Auditee</span>
