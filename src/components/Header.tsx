@@ -11,6 +11,7 @@ import {
   Users,
   Bell,
   User,
+  Database,
 } from 'lucide-react';
 import { TeamMember } from '../types/audit';
 
@@ -19,6 +20,8 @@ interface HeaderProps {
   onOpenUploadModal: () => void;
   onOpenTeamModal: () => void;
   onOpenNotificationModal: () => void;
+  onOpenDatabaseModal: () => void;
+  isSheetsConnected?: boolean;
   activeScenarioTitle?: string;
   totalFindingsCount: number;
   criticalCount: number;
@@ -32,6 +35,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenUploadModal,
   onOpenTeamModal,
   onOpenNotificationModal,
+  onOpenDatabaseModal,
+  isSheetsConnected = false,
   activeScenarioTitle,
   totalFindingsCount,
   criticalCount,
@@ -144,6 +149,28 @@ export const Header: React.FC<HeaderProps> = ({
               <Bell className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden md:inline">แจ้งเตือน</span>
             </button>
+
+            {/* Database Settings Button (Admin Only) */}
+            {currentUser.role === 'ADMIN' && (
+              <button
+                onClick={onOpenDatabaseModal}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition border cursor-pointer ${
+                  isSheetsConnected
+                    ? 'bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border-emerald-500/50'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                }`}
+                title="ตั้งค่าฐานข้อมูล Google Sheets (KRC_Audit_Database_Master) - เฉพาะ Admin"
+              >
+                <Database className={`w-3.5 h-3.5 ${isSheetsConnected ? 'text-emerald-400' : 'text-blue-300'}`} />
+                <span className="hidden sm:inline">ฐานข้อมูล</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Admin
+                </span>
+                {isSheetsConnected && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                )}
+              </button>
+            )}
 
             {/* Upload Checklist Button */}
             <button

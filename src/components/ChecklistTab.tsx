@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { AuditItem, AuditFinding, CapData, AuditeeSubmission } from '../types/audit';
 import { AUDIT_CATEGORIES } from '../data/auditChecklistData';
+import { KRC_AUDIT_DEPARTMENTS, assignDepartmentToItem } from '../data/auditDepartments';
 import { AuditeeResponseModal } from './AuditeeResponseModal';
 import {
   Sparkles,
@@ -31,6 +32,11 @@ import {
   ExternalLink,
   PlusCircle,
   X,
+  Building2,
+  Calendar,
+  Users,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 
 interface ChecklistTabProps {
@@ -41,11 +47,16 @@ interface ChecklistTabProps {
   statusFilter: string;
   onClearStatusFilter: () => void;
   onOpenUploadModal: () => void;
+  onOpenUploadModalWithDept?: (deptId: string) => void;
+  onClearDepartmentItems?: (deptId: string) => void;
+  onClearAllItems?: () => void;
   checklistTitle?: string;
   onResetToDefault?: () => void;
   isCustomChecklist?: boolean;
   roleMode?: 'AUDITOR' | 'AUDITEE';
   onToggleRole?: (role: 'AUDITOR' | 'AUDITEE') => void;
+  selectedDepartment?: string;
+  onSelectDepartment?: (deptId: string) => void;
 }
 
 export const ChecklistTab: React.FC<ChecklistTabProps> = ({
@@ -56,12 +67,24 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
   statusFilter,
   onClearStatusFilter,
   onOpenUploadModal,
-  checklistTitle = 'แบบฟอร์ม F-SE-006 (87 ข้อ)',
+  onOpenUploadModalWithDept,
+  onClearDepartmentItems,
+  onClearAllItems,
+  checklistTitle = 'Audit Checklist',
   onResetToDefault,
-  isCustomChecklist = false,
+  isCustomChecklist = true,
   roleMode = 'AUDITOR',
   onToggleRole,
+  selectedDepartment,
+  onSelectDepartment,
 }) => {
+  const [internalDept, setInternalDept] = useState<string>('ALL');
+  const activeDept = selectedDepartment !== undefined ? selectedDepartment : internalDept;
+  const setActiveDept = (deptId: string) => {
+    if (onSelectDepartment) onSelectDepartment(deptId);
+    setInternalDept(deptId);
+  };
+
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [highPriorityOnly, setHighPriorityOnly] = useState<boolean>(false);
@@ -75,21 +98,49 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
   const [auditeeModalItem, setAuditeeModalItem] = useState<AuditItem | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
+  // Department counts
+  const departmentCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    KRC_AUDIT_DEPARTMENTS.forEach((d) => {
+      counts[d.id] = 0;
+    });
+    items.forEach((it) => {
+      const dept = it.department || assignDepartmentToItem(it);
+      counts[dept] = (counts[dept] || 0) + 1;
+    });
+    return counts;
+  }, [items]);
+
+  const currentDeptInfo = useMemo(() => {
+    if (activeDept === 'ALL') return null;
+    return KRC_AUDIT_DEPARTMENTS.find((d) => d.id === activeDept) || null;
+  }, [activeDept]);
+
   // Dynamic categories from items
   const dynamicCategories = useMemo(() => {
     const map = new Map<string, string>();
     items.forEach((it) => {
-      if (!map.has(it.categoryCode)) {
-        map.set(it.categoryCode, it.categoryTitle);
+      const itemDept = it.department || assignDepartmentToItem(it);
+      if (activeDept === 'ALL' || itemDept === activeDept) {
+        if (!map.has(it.categoryCode)) {
+          map.set(it.categoryCode, it.categoryTitle);
+        }
       }
     });
     return Array.from(map.entries()).map(([code, title]) => ({ code, title }));
-  }, [items]);
+  }, [items, activeDept]);
 
   // Export current checklist to Excel
   const handleExportToExcel = () => {
-    const exportRows = items.map((it) => ({
+    const itemsToExport = items.filter((it) => {
+      if (activeDept === 'ALL') return true;
+      const dept = it.department || assignDepartmentToItem(it);
+      return dept === activeDept;
+    });
+
+    const exportRows = itemsToExport.map((it) => ({
       'ลำดับ (No)': it.id,
+      'ฝ่าย/แผนก (Department)': it.department || assignDepartmentToItem(it),
       'รหัสหมวด': it.categoryCode,
       'ชื่อหมวด': it.categoryTitle,
       'ข้อกำหนด': it.requirement,
@@ -110,14 +161,19 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'AuditResults');
+    const deptTag = activeDept !== 'ALL' ? `_${activeDept}` : '';
     XLSX.writeFile(
       workbook,
-      `KRC_Audit_Checklist_${new Date().toISOString().split('T')[0]}.xlsx`
+      `KRC_Audit_Checklist${deptTag}_${new Date().toISOString().split('T')[0]}.xlsx`
     );
   };
 
   // Filter items
   const filteredItems = items.filter((item) => {
+    const itemDept = item.department || assignDepartmentToItem(item);
+    if (activeDept !== 'ALL' && itemDept !== activeDept) {
+      return false;
+    }
     if (selectedCategory !== 'ALL' && item.categoryCode !== selectedCategory) {
       return false;
     }
@@ -386,6 +442,181 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
         )}
       </div>
 
+      {/* 🏢 Department Selector Section (แบ่งตามฝ่าย/แผนกตามตารางออดิต) */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-700">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-slate-900">
+                  จำลองการ Audit: แบ่งตามฝ่าย / แผนก (15 ฝ่ายตามแผนตรวจ K.R.C.)
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                เลือกฝ่ายเพื่อตรวจสอบข้อคำถาม หรืออัปโหลดไฟล์ Checklist แยกตามแต่ละฝ่าย
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (onOpenUploadModalWithDept) {
+                  onOpenUploadModalWithDept(activeDept !== 'ALL' ? activeDept : 'ALL');
+                } else {
+                  onOpenUploadModal();
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+            >
+              <UploadCloud className="w-4 h-4 text-blue-100" />
+              <span>
+                {activeDept !== 'ALL'
+                  ? `+ อัปโหลด Checklist ฝ่าย ${activeDept}`
+                  : '+ อัปโหลด Checklist (เลือกฝ่าย)'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Departments Multi-Row Filter Buttons (แสดงครบทุกฝ่าย 2-3 แถว ไม่ต้องเลื่อนแถบ Scrollbar) */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            onClick={() => setActiveDept('ALL')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-xs ${
+              activeDept === 'ALL'
+                ? 'bg-slate-900 text-white shadow-md ring-2 ring-slate-400'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+            }`}
+          >
+            <span>🌐 ทุกฝ่าย / รวมทั้งหมด</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                activeDept === 'ALL' ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {items.length}
+            </span>
+          </button>
+
+          {KRC_AUDIT_DEPARTMENTS.map((dept) => {
+            const count = departmentCounts[dept.id] || 0;
+            const isSelected = activeDept === dept.id;
+            return (
+              <button
+                key={dept.id}
+                onClick={() => setActiveDept(dept.id)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                  isSelected
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300'
+                    : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                }`}
+              >
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+                    isSelected ? 'bg-indigo-800 text-indigo-100' : dept.badgeColor
+                  }`}
+                >
+                  {dept.teamShort}
+                </span>
+                <span>{dept.name}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
+                    count === 0
+                      ? isSelected
+                        ? 'bg-amber-400 text-slate-900'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : isSelected
+                      ? 'bg-indigo-800 text-indigo-100'
+                      : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {count > 0 ? `${count} ข้อ` : 'ยังไม่มีข้อ'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected Department Focus Card */}
+        {activeDept !== 'ALL' && currentDeptInfo && (
+          <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-blue-950 text-white rounded-xl p-4 sm:p-5 shadow-inner border border-indigo-500/30">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-400 text-slate-950 uppercase tracking-wide">
+                    {currentDeptInfo.teamShort}
+                  </span>
+                  <span className="text-xs text-indigo-200 font-medium">
+                    กำหนดการ: 📅 {currentDeptInfo.date} | ⏰ {currentDeptInfo.time}
+                  </span>
+                  <span className="text-xs text-slate-300 font-mono">
+                    ({departmentCounts[currentDeptInfo.id] || 0} ข้อตรวจในระบบ)
+                  </span>
+                </div>
+
+                <h4 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                  <span>ฝ่าย / แผนก: {currentDeptInfo.name}</span>
+                </h4>
+
+                <p className="text-xs text-indigo-100/90 flex items-center gap-1.5 flex-wrap">
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-300 inline" />
+                  <strong>คณะผู้ตรวจประเมิน:</strong> {currentDeptInfo.team}
+                </p>
+              </div>
+
+              {/* Department Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    if (onOpenUploadModalWithDept) {
+                      onOpenUploadModalWithDept(currentDeptInfo.id);
+                    } else {
+                      onOpenUploadModal();
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <UploadCloud className="w-4 h-4 text-blue-100" />
+                  <span>+ อัปโหลด Checklist ฝ่ายนี้</span>
+                </button>
+
+                <button
+                  onClick={handleExportToExcel}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                  title="ส่งออกข้อตรวจของฝ่ายนี้เป็น Excel"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>ส่งออก Excel</span>
+                </button>
+
+                {(departmentCounts[currentDeptInfo.id] || 0) > 0 && onClearDepartmentItems && (
+                  <button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `คุณต้องการลบข้อตรวจทั้งหมดของฝ่าย "${currentDeptInfo.name}" (${departmentCounts[currentDeptInfo.id]} ข้อ) เพื่อเตรียมอัปโหลดชุดใหม่ใช่หรือไม่?`
+                        )
+                      ) {
+                        onClearDepartmentItems(currentDeptInfo.id);
+                      }
+                    }}
+                    className="px-3 py-2 bg-rose-950/60 hover:bg-rose-900 text-rose-200 text-xs font-semibold rounded-xl border border-rose-800/60 transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                    title="ลบเฉพาะข้อตรวจของฝ่ายนี้"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-300" />
+                    <span>ล้างข้อตรวจฝ่ายนี้</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Category Pills Header & Toolbar */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -437,23 +668,23 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
               <span>ส่งออก Excel</span>
             </button>
 
-            {/* Reset to Default Button if custom */}
-            {isCustomChecklist && onResetToDefault && (
+            {/* Clear All Items Button */}
+            {items.length > 0 && onClearAllItems && (
               <button
                 onClick={() => {
                   if (
                     window.confirm(
-                      'คุณต้องการรีเซ็ตกลับเป็น Checklist มาตรฐาน F-SE-006 (87 ข้อ) หรือไม่?'
+                      `คุณต้องการลบข้อตรวจทั้งหมดในระบบ (${items.length} ข้อ) ออกเพื่อเริ่มต้นใหม่ใช่หรือไม่?`
                     )
                   ) {
-                    onResetToDefault();
+                    onClearAllItems();
                   }
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-700 hover:text-rose-900 hover:bg-rose-50 rounded-xl border border-rose-200 transition cursor-pointer"
-                title="กลับไปใช้ฟอร์มมาตรฐาน F-SE-006"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-rose-700 hover:text-rose-900 hover:bg-rose-50 rounded-xl border border-rose-200 transition cursor-pointer"
+                title="ลบข้อตรวจทั้งหมดเพื่อเริ่มต้นใหม่"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>รีเซ็ต F-SE-006</span>
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>ลบข้อตรวจทั้งหมด</span>
               </button>
             )}
           </div>
@@ -553,17 +784,74 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
       {/* Checklist Cards List */}
       <div className="space-y-4">
         {filteredItems.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
-            <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-slate-700">ไม่พบรายการตรวจสอบที่ตรงกับเงื่อนไข</h3>
-            <p className="text-xs text-slate-500">
-              ลองล้างคำค้นหา หรือเลือกหมวดหมู่อื่นเพื่อดูรายการตรวจสอบ
-            </p>
-          </div>
+          currentDeptInfo ? (
+            <div className="bg-white rounded-2xl p-10 text-center border-2 border-dashed border-indigo-200 space-y-4 shadow-sm">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center mx-auto text-indigo-600">
+                <Building2 className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-slate-900">
+                  ยังไม่มีข้อตรวจ (Checklist) สำหรับฝ่าย "{currentDeptInfo.name}"
+                </h3>
+                <p className="text-xs text-slate-500 max-w-lg mx-auto">
+                  คณะผู้ตรวจ: <strong>{currentDeptInfo.team}</strong> &bull; กำหนดการตรวจ: <strong>{currentDeptInfo.date} เวลา {currentDeptInfo.time}</strong>
+                  <br />
+                  คุณสามารถอัปโหลดไฟล์ Checklist (Excel / CSV) สำหรับฝ่ายนี้ได้โดยตรง
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    if (onOpenUploadModalWithDept) {
+                      onOpenUploadModalWithDept(currentDeptInfo.id);
+                    } else {
+                      onOpenUploadModal();
+                    }
+                  }}
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-2 cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4 text-blue-100" />
+                  <span>+ อัปโหลด Checklist ฝ่าย {currentDeptInfo.name}</span>
+                </button>
+              </div>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border-2 border-dashed border-slate-300 space-y-4 shadow-xs">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600">
+                <UploadCloud className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5 max-w-lg mx-auto">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                  ระบบลบข้อมูลตัวอย่างทั้งหมดออกเรียบร้อยแล้ว
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  ขณะนี้ไม่มีข้อตรวจตัวอย่างค้างอยู่ในระบบ คุณสามารถอัปโหลดไฟล์ Checklist (Excel หรือ CSV) ได้ทั้งแบบรวมทุกฝ่าย หรือเลือกนำเข้าแยกเฉพาะแต่ละฝ่าย/แผนก (เช่น IT, Transport, QC, Purchase) ได้ทันที
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={onOpenUploadModal}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-2 cursor-pointer"
+                >
+                  <UploadCloud className="w-4 h-4 text-blue-100" />
+                  <span>+ อัปโหลดไฟล์ Checklist (Excel / CSV)</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
+              <BookOpen className="w-12 h-12 text-slate-300 mx-auto" />
+              <h3 className="text-base font-bold text-slate-700">ไม่พบรายการตรวจสอบที่ตรงกับเงื่อนไข</h3>
+              <p className="text-xs text-slate-500">
+                ลองล้างคำค้นหา หรือเลือกหมวดหมู่อื่นเพื่อดูรายการตรวจสอบ
+              </p>
+            </div>
+          )
         ) : (
           filteredItems.map((item) => {
             const isExpanded = expandedItemId === item.id;
             const isEvaluating = evaluatingItemId === item.id;
+            const itemDeptName = item.department || assignDepartmentToItem(item);
 
             return (
               <div
@@ -587,6 +875,10 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded-md">
                           #{item.id}
+                        </span>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-900 border border-indigo-200 flex items-center gap-1">
+                          <Building2 className="w-3 h-3 text-indigo-600 inline" />
+                          <span>{itemDeptName}</span>
                         </span>
                         <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
                           {item.requirement}

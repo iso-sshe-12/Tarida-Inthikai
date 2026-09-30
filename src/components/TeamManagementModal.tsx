@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ShieldAlert,
   User,
+  Database,
 } from 'lucide-react';
 import { TeamMember, UserRole, AuditItem } from '../types/audit';
 
@@ -32,6 +33,7 @@ interface TeamManagementModalProps {
   ) => void;
   currentUser: TeamMember;
   onSwitchCurrentUser: (user: TeamMember) => void;
+  onOpenDatabaseModal?: () => void;
 }
 
 export const TeamManagementModal: React.FC<TeamManagementModalProps> = ({
@@ -43,6 +45,7 @@ export const TeamManagementModal: React.FC<TeamManagementModalProps> = ({
   onBulkAssign,
   currentUser,
   onSwitchCurrentUser,
+  onOpenDatabaseModal,
 }) => {
   if (!isOpen) return null;
 
@@ -231,6 +234,41 @@ export const TeamManagementModal: React.FC<TeamManagementModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Database Settings Banner (Admin Only) */}
+              {currentUser.role === 'ADMIN' && onOpenDatabaseModal && (
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-emerald-600 text-white shrink-0">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-emerald-950 text-xs">
+                          ฐานข้อมูล Google Sheets (Users_and_Roles & Findings)
+                        </p>
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 border border-amber-300">
+                          เฉพาะ Admin
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        เชื่อมต่อ Web App เพื่อซิงค์สิทธิ์และผลตรวจไปยัง Google Drive อัตโนมัติ
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenDatabaseModal();
+                    }}
+                    className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
+                  >
+                    <Database className="w-3.5 h-3.5" />
+                    <span>ตั้งค่าฐานข้อมูล</span>
+                  </button>
+                </div>
+              )}
 
               {/* Members List Header & Add Button */}
               <div className="flex items-center justify-between pt-2">

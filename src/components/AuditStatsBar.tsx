@@ -7,7 +7,7 @@ interface AuditStatsBarProps {
   onFilterStatus: (status: string) => void;
   selectedStatusFilter: string;
   onOpenReport: () => void;
-  onOpenCarManager: () => void;
+  onOpenCarManager?: () => void;
 }
 
 export const AuditStatsBar: React.FC<AuditStatsBarProps> = ({
@@ -215,22 +215,14 @@ export const AuditStatsBar: React.FC<AuditStatsBarProps> = ({
           </button>
         </div>
 
-        {/* Action Buttons: CAR & Executive Report */}
-        <div className="lg:col-span-3 flex flex-row lg:flex-col gap-2.5">
-          <button
-            onClick={onOpenCarManager}
-            className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer"
-          >
-            <ShieldAlert className="w-4 h-4 text-rose-600" />
-            <span>ใบ CAR & CAP ({carCount})</span>
-          </button>
-
+        {/* Action Button: Executive Report */}
+        <div className="lg:col-span-3 flex items-center">
           <button
             onClick={onOpenReport}
-            className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-500/10 transition active:scale-95 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 transition active:scale-95 cursor-pointer"
           >
             <FileText className="w-4 h-4 text-blue-200" />
-            <span>สรุปผล & ออกรายงาน (F-QS-007)</span>
+            <span>รายงานสรุปผลการตรวจ (Executive Report)</span>
           </button>
         </div>
       </div>

@@ -5,22 +5,46 @@ import { ChecklistTab } from './components/ChecklistTab';
 import { EvidenceScannerTab } from './components/EvidenceScannerTab';
 import { AuditeeExplainerTab } from './components/AuditeeExplainerTab';
 import { AuditSummaryTab } from './components/AuditSummaryTab';
+import { AuditScheduleTab } from './components/AuditScheduleTab';
 import { ExplainModal } from './components/ExplainModal';
 import { CarModal } from './components/CarModal';
 import { ScenarioModal } from './components/ScenarioModal';
 import { UploadChecklistModal } from './components/UploadChecklistModal';
-import { CarTrackerTab } from './components/CarTrackerTab';
 import { TeamManagementModal } from './components/TeamManagementModal';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
+import { DatabaseSettingsModal } from './components/DatabaseSettingsModal';
 import { INITIAL_CHECKLIST_DATA, ChecklistItem } from './data/auditChecklistData';
 import { MOCK_SCENARIOS, MockScenario } from './data/mockScenarios';
+import { DEFAULT_AUDIT_SCHEDULE } from './data/auditScheduleData';
 import { DEFAULT_TEAM_MEMBERS, DEFAULT_NOTIFICATION_CONFIG } from './data/teamMembersData';
-import { AuditItem, CapData, TeamMember, NotificationConfig, NotificationLog, UserRole } from './types/audit';
+import { assignDepartmentToItem } from './data/auditDepartments';
+import {
+  AuditItem,
+  CapData,
+  TeamMember,
+  NotificationConfig,
+  NotificationLog,
+  UserRole,
+  GoogleSheetsConfig,
+  AuditPlanEntry,
+} from './types/audit';
+import {
+  getSheetsConfig,
+  saveSheetsConfig,
+  fetchSharedSheetsConfig,
+  syncFindingToSheets,
+  syncCarToSheets,
+  syncScheduleToSheets,
+  syncAllSchedulesToSheets,
+  fetchAuditSummaryFromSheets,
+  calculateSummaryMetrics,
+} from './utils/googleSheetsSync';
 import {
   ListChecks,
   Camera,
   MessageCircleQuestion,
   FileSpreadsheet,
+  Calendar,
   Sparkles,
   ShieldCheck,
   CheckCircle2,
@@ -31,12 +55,13 @@ import {
   Bell,
 } from 'lucide-react';
 
-const STORAGE_KEY_ITEMS = 'krc_audit_items_cache_v1';
-const STORAGE_KEY_TITLE = 'krc_audit_checklist_title_v1';
-const STORAGE_KEY_IS_CUSTOM = 'krc_audit_is_custom_v1';
+const STORAGE_KEY_ITEMS = 'krc_audit_items_cache_v3';
+const STORAGE_KEY_TITLE = 'krc_audit_checklist_title_v3';
+const STORAGE_KEY_IS_CUSTOM = 'krc_audit_is_custom_v3';
 const STORAGE_KEY_MEMBERS = 'krc_audit_team_members_v1';
 const STORAGE_KEY_NOTIF = 'krc_audit_notif_config_v1';
 const STORAGE_KEY_NOTIF_LOGS = 'krc_audit_notif_logs_v1';
+const STORAGE_KEY_SCHEDULE = 'krc_audit_schedule_v1';
 
 export default function App() {
   // Initialize with the realistic pre-audit scenario
@@ -55,27 +80,31 @@ export default function App() {
     });
   };
 
-  // State: Checklist Items with localStorage hydration
+  // State: Checklist Items with localStorage hydration (default to empty list, sample items removed)
   const [checklistItems, setChecklistItems] = useState<AuditItem[]>(() => {
     try {
+      // Purge legacy sample caches
+      localStorage.removeItem('krc_audit_items_cache_v1');
+      localStorage.removeItem('krc_audit_items_cache_v2');
+
       const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
     } catch (e) {
       console.warn('Failed to parse cached checklist from localStorage:', e);
     }
-    return applyScenarioToData(INITIAL_CHECKLIST_DATA, defaultScenario);
+    return []; // All sample items deleted as requested
   });
 
   const [checklistTitle, setChecklistTitle] = useState<string>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY_TITLE) || 'แบบฟอร์ม F-SE-006 (87 ข้อ)';
+      return localStorage.getItem(STORAGE_KEY_TITLE) || 'Audit Checklist';
     } catch {
-      return 'แบบฟอร์ม F-SE-006 (87 ข้อ)';
+      return 'Audit Checklist';
     }
   });
 
@@ -83,7 +112,7 @@ export default function App() {
     try {
       return localStorage.getItem(STORAGE_KEY_IS_CUSTOM) === 'true';
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -99,9 +128,93 @@ export default function App() {
   }, [checklistItems, checklistTitle, isCustomChecklist]);
 
   const [activeScenario, setActiveScenario] = useState<MockScenario>(defaultScenario);
-  const [activeTab, setActiveTab] = useState<'CHECKLIST' | 'EVIDENCE' | 'CAR_TRACKER' | 'EXPLAINER' | 'SUMMARY'>('CHECKLIST');
+  const [activeTab, setActiveTab] = useState<'SCHEDULE' | 'CHECKLIST' | 'EVIDENCE' | 'EXPLAINER' | 'SUMMARY'>('SCHEDULE');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [roleMode, setRoleMode] = useState<'AUDITOR' | 'AUDITEE'>('AUDITOR');
+
+  // Audit Schedule State
+  const [auditSchedule, setAuditSchedule] = useState<AuditPlanEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_SCHEDULE);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached audit schedule:', e);
+    }
+    return DEFAULT_AUDIT_SCHEDULE;
+  });
+
+  // Sync audit schedule to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SCHEDULE, JSON.stringify(auditSchedule));
+    } catch (e) {
+      console.warn('Failed to save audit schedule to localStorage:', e);
+    }
+  }, [auditSchedule]);
+
+  const handleAddSchedule = (entry: AuditPlanEntry) => {
+    setAuditSchedule((prev) => [entry, ...prev]);
+    setToastMessage(`✓ เพิ่มแผนตรวจ "${entry.department}" ลงตารางออดิตเรียบร้อยแล้ว`);
+    setTimeout(() => setToastMessage(null), 3000);
+
+    // Auto-sync to Google Sheets if connected
+    if (sheetsConfig.isConnected && sheetsConfig.webAppUrl) {
+      syncScheduleToSheets(sheetsConfig.webAppUrl, entry).then((res) => {
+        if (res.success) {
+          setToastMessage(`✓ บันทึก "${entry.department}" ลงไฟล์ KRC_Audit_Database_Master แล้ว!`);
+          setTimeout(() => setToastMessage(null), 3500);
+        }
+      });
+    }
+  };
+
+  const handleUpdateSchedule = (updated: AuditPlanEntry) => {
+    setAuditSchedule((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setToastMessage(`✓ อัปเดตข้อมูลตารางออดิต ${updated.id} สำเร็จ`);
+    setTimeout(() => setToastMessage(null), 3000);
+
+    // Auto-sync to Google Sheets if connected
+    if (sheetsConfig.isConnected && sheetsConfig.webAppUrl) {
+      syncScheduleToSheets(sheetsConfig.webAppUrl, updated).then((res) => {
+        if (res.success) {
+          setToastMessage(`✓ อัปเดตข้อมูล ${updated.id} ไปยังไฟล์ KRC_Audit_Database_Master แล้ว!`);
+          setTimeout(() => setToastMessage(null), 3500);
+        }
+      });
+    }
+  };
+
+  const handleSyncAllSchedulesToSheets = async () => {
+    if (!sheetsConfig.webAppUrl) {
+      setToastMessage('⚠️ ยังไม่ได้เชื่อมต่อ Google Sheets กรุณาเปิดเมนูฐานข้อมูลเพื่อตั้งค่า');
+      setTimeout(() => setToastMessage(null), 3500);
+      return;
+    }
+
+    setToastMessage('⏳ กำลังซิงค์ตารางออดิตทั้งหมดไปยังไฟล์ KRC_Audit_Database_Master...');
+    const res = await syncAllSchedulesToSheets(sheetsConfig.webAppUrl, auditSchedule);
+    if (res.success) {
+      setToastMessage(`✓ ซิงค์ตารางออดิต ${auditSchedule.length} แผนกลงชีต Audit_Schedule_Plan สำเร็จแล้ว!`);
+    } else {
+      setToastMessage(`❌ ซิงค์ไม่สำเร็จ: ${res.message}`);
+    }
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleDeleteSchedule = (id: string) => {
+    setAuditSchedule((prev) => prev.filter((s) => s.id !== id));
+    setToastMessage(`✓ ลบรายการ ${id} ออกจากตารางออดิตแล้ว`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleResetSchedule = () => {
+    setAuditSchedule(DEFAULT_AUDIT_SCHEDULE);
+    setToastMessage('✓ รีเซ็ตตารางออดิตกลับเป็นแผนมาตรฐาน K.R.C. สำเร็จ');
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // Team & Users state
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
@@ -170,10 +283,62 @@ export default function App() {
   // Modals state
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState<boolean>(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
+  const [targetUploadDepartment, setTargetUploadDepartment] = useState<string>('ALL');
   const [isTeamModalOpen, setIsTeamModalOpen] = useState<boolean>(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
+  const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState<boolean>(false);
   const [explainItem, setExplainItem] = useState<AuditItem | null>(null);
   const [carItem, setCarItem] = useState<AuditItem | null>(null);
+
+  // Google Sheets Database Config state
+  const [sheetsConfig, setSheetsConfig] = useState<GoogleSheetsConfig>(getSheetsConfig);
+
+  // On mount: attempt to check and fetch summary from Google Sheets if Web App URL is configured
+  useEffect(() => {
+    const initSheets = async () => {
+      let currentCfg = sheetsConfig;
+      if (!currentCfg.webAppUrl) {
+        const remoteCfg = await fetchSharedSheetsConfig();
+        if (remoteCfg?.webAppUrl) {
+          currentCfg = remoteCfg;
+          setSheetsConfig(remoteCfg);
+        }
+      }
+
+      if (currentCfg.webAppUrl) {
+        fetchAuditSummaryFromSheets(currentCfg.webAppUrl)
+          .then((res) => {
+            if (res.success && res.summary) {
+              setSheetsConfig((prev) => {
+                const updated = {
+                  ...prev,
+                  isConnected: true,
+                  lastTestedAt: new Date().toLocaleTimeString('th-TH'),
+                };
+                saveSheetsConfig(updated);
+                return updated;
+              });
+              console.log('[Google Sheets] Connected to KRC_Audit_Database_Master:', res.summary);
+            }
+          })
+          .catch((e) => console.warn('[Google Sheets] Initial connect check failed:', e));
+      }
+    };
+
+    initSheets();
+  }, []);
+
+  // Admin-only Database Modal opener
+  const handleOpenDatabaseModal = () => {
+    if (currentUser.role !== 'ADMIN') {
+      setToastMessage(
+        `⚠️ สิทธิ์ไม่เพียงพอ: บัญชี "${currentUser.name}" (${currentUser.role}) ไม่มีสิทธิ์เข้าถึงเมนูฐานข้อมูล (เฉพาะ Admin เท่านั้น)`
+      );
+      setTimeout(() => setToastMessage(null), 3500);
+      return;
+    }
+    setIsDatabaseModalOpen(true);
+  };
 
   // Bulk Assign Handler
   const handleBulkAssign = (
@@ -314,25 +479,63 @@ export default function App() {
   // Handlers for Checklist Import
   const handleImportChecklist = (
     newItems: AuditItem[],
-    mode: 'REPLACE' | 'APPEND',
-    title: string
+    mode: 'REPLACE' | 'APPEND' | 'REPLACE_DEPT',
+    title: string,
+    targetDept?: string
   ) => {
-    if (mode === 'REPLACE') {
+    if (mode === 'REPLACE_DEPT' && targetDept) {
+      setChecklistItems((prev) => {
+        const otherDeptItems = prev.filter(
+          (it) => (it.department || assignDepartmentToItem(it)) !== targetDept
+        );
+        const maxId = otherDeptItems.reduce((max, it) => Math.max(max, it.id), 0);
+        const remappedNewItems = newItems.map((it, idx) => ({
+          ...it,
+          id: maxId + idx + 1,
+          department: targetDept,
+        }));
+        return [...otherDeptItems, ...remappedNewItems];
+      });
+      setToastMessage(`✓ นำเข้า Checklist ฝ่าย "${targetDept}" สำเร็จ (${newItems.length} ข้อ)`);
+      setTimeout(() => setToastMessage(null), 3500);
+      setIsCustomChecklist(true);
+    } else if (mode === 'REPLACE') {
       setChecklistItems(newItems);
       setChecklistTitle(title || 'Checklist ที่อัปโหลดใหม่');
       setIsCustomChecklist(true);
+      setToastMessage(`✓ แทนที่ Checklist ทั้งหมดสำเร็จ (${newItems.length} ข้อ)`);
+      setTimeout(() => setToastMessage(null), 3500);
     } else {
       // Append mode: ensure continuous IDs
       const maxId = checklistItems.reduce((max, it) => Math.max(max, it.id), 0);
       const remappedNewItems = newItems.map((it, idx) => ({
         ...it,
         id: maxId + idx + 1,
+        department: it.department || (targetDept && targetDept !== 'ALL' ? targetDept : assignDepartmentToItem(it)),
       }));
       setChecklistItems([...checklistItems, ...remappedNewItems]);
       setChecklistTitle(`${checklistTitle} (+ ${title})`);
       setIsCustomChecklist(true);
+      setToastMessage(`✓ เพิ่มข้อคำถามต่อท้ายสำเร็จ (+${newItems.length} ข้อ)`);
+      setTimeout(() => setToastMessage(null), 3500);
     }
     setActiveTab('CHECKLIST');
+  };
+
+  const handleClearDepartmentItems = (deptId: string) => {
+    setChecklistItems((prev) =>
+      prev.filter((it) => (it.department || assignDepartmentToItem(it)) !== deptId)
+    );
+    setToastMessage(`✓ ล้างข้อตรวจของฝ่าย "${deptId}" เรียบร้อยแล้ว พร้อมอัปโหลดชุดใหม่`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleClearAllItems = () => {
+    setChecklistItems([]);
+    setChecklistTitle('Audit Checklist');
+    setIsCustomChecklist(true);
+    setToastMessage('✓ ลบข้อตรวจทั้งหมดในระบบแล้ว พร้อมสำหรับการอัปโหลดชุดใหม่');
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   const handleResetToDefault = () => {
@@ -343,21 +546,38 @@ export default function App() {
     } catch (e) {
       console.warn(e);
     }
-    setChecklistItems(applyScenarioToData(INITIAL_CHECKLIST_DATA, defaultScenario));
-    setChecklistTitle('แบบฟอร์ม F-SE-006 (87 ข้อ)');
-    setIsCustomChecklist(false);
+    setChecklistItems([]);
+    setChecklistTitle('Audit Checklist');
+    setIsCustomChecklist(true);
+    setToastMessage('✓ ลบข้อมูลตัวอย่างทั้งหมดแล้ว พร้อมสำหรับการอัปโหลดใหม่');
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   // Handlers
   const handleUpdateItem = (updatedItem: AuditItem) => {
-    setChecklistItems((prev) =>
-      prev.map((item) => (item.id === updatedItem.id ? updatedItem : item))
-    );
+    setChecklistItems((prev) => {
+      const next = prev.map((item) => (item.id === updatedItem.id ? updatedItem : item));
+
+      // Auto-sync Finding to Google Sheets (Audit_Findings_Evidence & Audit_Summary)
+      if (sheetsConfig.webAppUrl && sheetsConfig.autoSyncOnFinding && updatedItem.status !== 'PENDING') {
+        const summary = calculateSummaryMetrics(next, activeScenario?.title, currentUser.name);
+        syncFindingToSheets(sheetsConfig.webAppUrl, updatedItem, currentUser.role, summary)
+          .then((res) => {
+            if (res.success) {
+              setToastMessage(`✓ บันทึกข้อ #${updatedItem.id} (${updatedItem.status}) ลง Google Sheets สำเร็จ`);
+              setTimeout(() => setToastMessage(null), 3000);
+            }
+          })
+          .catch((err) => console.warn('Failed to sync finding to Google Sheets:', err));
+      }
+
+      return next;
+    });
   };
 
   const handleApplyFindingFromScanner = (itemId: number, findingData: any) => {
-    setChecklistItems((prev) =>
-      prev.map((item) => {
+    setChecklistItems((prev) => {
+      const next = prev.map((item) => {
         if (item.id === itemId) {
           const newCapData: CapData | undefined = findingData.capRequired
             ? {
@@ -380,7 +600,7 @@ export default function App() {
               }
             : item.capData;
 
-          return {
+          const updated: AuditItem = {
             ...item,
             status: findingData.status || item.status,
             evidenceRecorded: findingData.evidenceRecorded || item.evidenceRecorded,
@@ -390,15 +610,28 @@ export default function App() {
             capRequired: findingData.capRequired,
             capData: newCapData,
           };
+
+          // Auto-sync finding & CAR from Scanner to Google Sheets
+          if (sheetsConfig.webAppUrl && sheetsConfig.autoSyncOnFinding) {
+            const summary = calculateSummaryMetrics(prev, activeScenario?.title, currentUser.name);
+            syncFindingToSheets(sheetsConfig.webAppUrl, updated, currentUser.role, summary);
+            if (newCapData && sheetsConfig.autoSyncOnCar) {
+              syncCarToSheets(sheetsConfig.webAppUrl, updated, newCapData);
+            }
+          }
+
+          return updated;
         }
         return item;
-      })
-    );
+      });
+      return next;
+    });
   };
 
   const handleSaveCap = (itemId: number, updatedCap: CapData) => {
-    setChecklistItems((prev) =>
-      prev.map((item) =>
+    setChecklistItems((prev) => {
+      const targetItem = prev.find((it) => it.id === itemId);
+      const next = prev.map((item) =>
         item.id === itemId
           ? {
               ...item,
@@ -406,8 +639,22 @@ export default function App() {
               capData: updatedCap,
             }
           : item
-      )
-    );
+      );
+
+      // Auto-sync CAR & CAP to Google Sheets (CAR_CAP_Tracking)
+      if (sheetsConfig.webAppUrl && sheetsConfig.autoSyncOnCar && targetItem) {
+        syncCarToSheets(sheetsConfig.webAppUrl, targetItem, updatedCap, 'AUD-KRC-2026-001')
+          .then((res) => {
+            if (res.success) {
+              setToastMessage(`✓ บันทึกใบ ${updatedCap.carNo} ลงชีต CAR_CAP_Tracking สำเร็จ!`);
+              setTimeout(() => setToastMessage(null), 3500);
+            }
+          })
+          .catch((err) => console.warn('Failed to sync CAR to Google Sheets:', err));
+      }
+
+      return next;
+    });
   };
 
   const handleSelectScenario = (scenario: MockScenario) => {
@@ -427,6 +674,8 @@ export default function App() {
         onOpenUploadModal={() => setIsUploadModalOpen(true)}
         onOpenTeamModal={() => setIsTeamModalOpen(true)}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+        onOpenDatabaseModal={handleOpenDatabaseModal}
+        isSheetsConnected={sheetsConfig.isConnected}
         activeScenarioTitle={activeScenario?.title}
         totalFindingsCount={totalFindingsCount}
         criticalCount={criticalCount}
@@ -483,11 +732,26 @@ export default function App() {
           }}
           selectedStatusFilter={statusFilter}
           onOpenReport={() => setActiveTab('SUMMARY')}
-          onOpenCarManager={() => setActiveTab('CAR_TRACKER')}
         />
 
         {/* Navigation Tabs */}
         <div className="flex border-b border-slate-200 mb-6 gap-2 overflow-x-auto pb-1">
+          {/* Audit Schedule Tab (First Tab) */}
+          <button
+            onClick={() => setActiveTab('SCHEDULE')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'SCHEDULE'
+                ? 'border-indigo-600 text-indigo-700 bg-white/70 rounded-t-xl'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-indigo-600" />
+            <span>ตารางออดิต (Audit Schedule & Plan)</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+              {auditSchedule.length}
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveTab('CHECKLIST')}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -497,7 +761,7 @@ export default function App() {
             }`}
           >
             <ListChecks className="w-4 h-4 text-blue-600" />
-            <span>จำลองการตรวจ Audit (87 ข้อ F-SE-006)</span>
+            <span>จำลองการ Audit</span>
           </button>
 
           <button
@@ -510,27 +774,6 @@ export default function App() {
           >
             <Camera className="w-4 h-4 text-indigo-600" />
             <span>ตรวจสอบหลักฐานด่วน (Evidence Inspector)</span>
-          </button>
-
-          {/* Dedicated CAR & CAP Tracker Tab */}
-          <button
-            onClick={() => setActiveTab('CAR_TRACKER')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'CAR_TRACKER'
-                ? 'border-rose-600 text-rose-700 bg-white/70 rounded-t-xl'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4 text-rose-600" />
-            <span>
-              ติดตาม CAR & CAP (
-              {
-                checklistItems.filter(
-                  (i) => i.status === 'MA' || i.status === 'MI' || i.capData
-                ).length
-              }
-              )
-            </span>
           </button>
 
           <button
@@ -549,16 +792,29 @@ export default function App() {
             onClick={() => setActiveTab('SUMMARY')}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'SUMMARY'
-                ? 'border-blue-600 text-blue-700 bg-white/70 rounded-t-xl'
+                ? 'border-emerald-600 text-emerald-800 bg-white/70 rounded-t-xl shadow-xs'
                 : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
             }`}
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>สรุปประเด็น & ออก CAR/CAP (F-QS-007)</span>
+            <span>รายงานสรุปผลการตรวจ (Audit Summary Report)</span>
           </button>
         </div>
 
         {/* Tab Views */}
+        {activeTab === 'SCHEDULE' && (
+          <AuditScheduleTab
+            scheduleItems={auditSchedule}
+            onAddSchedule={handleAddSchedule}
+            onUpdateSchedule={handleUpdateSchedule}
+            onDeleteSchedule={handleDeleteSchedule}
+            onResetSchedule={handleResetSchedule}
+            onJumpToChecklist={() => setActiveTab('CHECKLIST')}
+            isSheetsConnected={sheetsConfig.isConnected}
+            onSyncAllToSheets={handleSyncAllSchedulesToSheets}
+          />
+        )}
+
         {activeTab === 'CHECKLIST' && (
           <ChecklistTab
             items={checklistItems}
@@ -567,7 +823,16 @@ export default function App() {
             onOpenCarModal={(item) => setCarItem(item)}
             statusFilter={statusFilter}
             onClearStatusFilter={() => setStatusFilter('ALL')}
-            onOpenUploadModal={() => setIsUploadModalOpen(true)}
+            onOpenUploadModal={() => {
+              setTargetUploadDepartment('ALL');
+              setIsUploadModalOpen(true);
+            }}
+            onOpenUploadModalWithDept={(deptId) => {
+              setTargetUploadDepartment(deptId);
+              setIsUploadModalOpen(true);
+            }}
+            onClearDepartmentItems={handleClearDepartmentItems}
+            onClearAllItems={handleClearAllItems}
             checklistTitle={checklistTitle}
             isCustomChecklist={isCustomChecklist}
             onResetToDefault={handleResetToDefault}
@@ -582,16 +847,6 @@ export default function App() {
             onApplyFindingToItem={handleApplyFindingFromScanner}
             onOpenExplainModal={(item) => setExplainItem(item)}
             onOpenCarModal={(item) => setCarItem(item)}
-          />
-        )}
-
-        {activeTab === 'CAR_TRACKER' && (
-          <CarTrackerTab
-            items={checklistItems}
-            onOpenCarModal={(item) => setCarItem(item)}
-            onSendNotification={handleSendNotification}
-            currentUserRole={currentUser.role}
-            onUpdateItem={handleUpdateItem}
           />
         )}
 
@@ -652,6 +907,7 @@ export default function App() {
         onResetToDefault={handleResetToDefault}
         currentItemsCount={checklistItems.length}
         currentChecklistTitle={checklistTitle}
+        initialDepartment={targetUploadDepartment}
       />
 
       <TeamManagementModal
@@ -663,6 +919,7 @@ export default function App() {
         onBulkAssign={handleBulkAssign}
         currentUser={currentUser}
         onSwitchCurrentUser={handleSwitchCurrentUser}
+        onOpenDatabaseModal={handleOpenDatabaseModal}
       />
 
       <NotificationSettingsModal
@@ -672,6 +929,23 @@ export default function App() {
         onSaveConfig={setNotificationConfig}
         logs={notificationLogs}
         onTriggerTestNotification={handleTriggerTestNotification}
+      />
+
+      <DatabaseSettingsModal
+        isOpen={isDatabaseModalOpen}
+        onClose={() => setIsDatabaseModalOpen(false)}
+        config={sheetsConfig}
+        onUpdateConfig={(newCfg) => setSheetsConfig(newCfg)}
+        items={checklistItems}
+        teamMembers={teamMembers}
+        currentUser={currentUser}
+        scenarioTitle={activeScenario?.title}
+        onApplySummaryFromSheet={(sheetSummary) => {
+          setToastMessage(
+            `✓ ซิงค์ผลสรุปจากชีตแล้ว: เกรด ${sheetSummary.conformanceGrade || '-'} (${sheetSummary.conformanceRate ?? '-'}%)`
+          );
+          setTimeout(() => setToastMessage(null), 4000);
+        }}
       />
     </div>
   );

@@ -75,6 +75,7 @@ export interface AuditItem {
   assignedAuditeeId?: string;
   assignedAuditeeName?: string;
   dueDate?: string;
+  department?: string; // Auditee Department/Section e.g. "IT", "HR & GA", "Transport"
 }
 
 export interface NotificationConfig {
@@ -97,4 +98,51 @@ export interface NotificationLog {
   status: 'SENT' | 'SIMULATED' | 'FAILED';
   relatedCarNo?: string;
   relatedItemId?: number;
+}
+
+export interface GoogleSheetsConfig {
+  webAppUrl: string;
+  isConnected: boolean;
+  lastTestedAt?: string;
+  lastSyncedAt?: string;
+  spreadsheetName?: string;
+  autoSyncOnFinding: boolean;
+  autoSyncOnCar: boolean;
+}
+
+export interface AuditSummaryMetrics {
+  auditId: string;
+  scenarioName: string;
+  standard: string;
+  totalChecklist: number;
+  evaluatedCount: number;
+  pendingCount: number;
+  conformanceRate: number;
+  conformanceGrade: string;
+  countC: number;
+  countMajor: number;
+  countMinor: number;
+  countOBS: number;
+  countOFI: number;
+  auditorLeader: string;
+  status: string;
+  lastUpdated: string;
+}
+
+export type AuditPlanStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'POSTPONED';
+
+export interface AuditPlanEntry {
+  id: string; // e.g. "AUD-SCH-001"
+  date: string; // e.g. "2026-10-14"
+  timeSlot: string; // e.g. "09:00 - 12:00"
+  department: string; // e.g. "แผนกปฏิบัติการลานตู้คอนเทนเนอร์ (Yard Operations & Gate)"
+  location: string; // e.g. "ลานตู้คอนเทนเนอร์ Yard A & Gate 1-2"
+  scope: string; // e.g. "การตรวจรับสภาพตู้, สารเคมี, Work at Height, PPE Gate"
+  isoClauses: string[]; // e.g. ["ISO 9001: 8.5", "ISO 14001: 8.1", "ISO 45001: 8.1.2"]
+  leadAuditor: string; // e.g. "น้องออดิต (AI Lead Auditor) / ประภาส สันติสุข"
+  auditTeam?: string; // e.g. "อมรเทพ วงษ์สุวรรณ"
+  auditeeName: string; // e.g. "วิชัย ชัยชนะ (Supervisor ลานตู้)"
+  referenceDocs: string; // e.g. "P-PU-002, WI-OP-001, F-SE-006, F-SE-039"
+  status: AuditPlanStatus;
+  notes?: string;
 }

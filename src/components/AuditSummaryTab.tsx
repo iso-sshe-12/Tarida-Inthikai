@@ -73,19 +73,16 @@ export const AuditSummaryTab: React.FC<AuditSummaryTabProps> = ({
 
   // Generate Markdown table string for 1-click copy to Google Sheets/Google Docs
   const generateMarkdownTable = () => {
-    let md = `| ลำดับ | ข้อที่ | ข้อกำหนด ISO / กฎหมาย | สิ่งตรวจพบ / ข้อเท็จจริงหน้างาน | ผลประเมิน | สรุปข้อบกพร่อง / แผนแก้ไข (CAP) | ผู้รับผิดชอบ | กำหนดเสร็จ |\n`;
-    md += `| :---: | :---: | :--- | :--- | :---: | :--- | :--- | :---: |\n`;
+    let md = `| ลำดับ | ข้อที่ | ข้อกำหนด ISO / กฎหมาย | สิ่งตรวจพบ / ข้อเท็จจริงหน้างาน | ผลประเมิน | สรุปข้อบกพร่อง / ข้อสังเกตของ Auditor | เอกสาร/WI อ้างอิง |\n`;
+    md += `| :---: | :---: | :--- | :--- | :---: | :--- | :--- |\n`;
 
     displayedItems.forEach((item, index) => {
       const isoText = item.isoClauses?.join(', ') || item.requirement;
-      const findingText = (item.evidenceRecorded || '-').replace(/\n/g, ' ');
-      const capText = item.capData
-        ? `[CAR ${item.capData.carNo}] แก้ไข: ${item.capData.correction} | ระบบ: ${item.capData.correctiveAction}`
-        : item.auditorFindingDetail || '-';
-      const pic = item.capData?.personInCharge || '-';
-      const targetDate = item.capData?.targetDate || '-';
+      const findingText = (item.evidenceRecorded || item.question).replace(/\n/g, ' ');
+      const detail = (item.auditorFindingDetail || (item.status === 'C' ? 'สอดคล้องตามข้อกำหนด' : '-')).replace(/\n/g, ' ');
+      const doc = item.referenceDocs || '-';
 
-      md += `| ${index + 1} | ข้อ #${item.id} | ${isoText} | ${findingText} | ${item.status} | ${capText} | ${pic} | ${targetDate} |\n`;
+      md += `| ${index + 1} | ข้อ #${item.id} | ${isoText} | ${findingText} | ${item.status} | ${detail} | ${doc} |\n`;
     });
 
     return md;
@@ -289,26 +286,24 @@ export const AuditSummaryTab: React.FC<AuditSummaryTabProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-white uppercase text-[11px] tracking-wider">
               <tr>
-                <th className="py-3 px-3 text-center w-12">ข้อที่</th>
-                <th className="py-3 px-3 w-32">ข้อกำหนด / กฎหมาย</th>
-                <th className="py-3 px-4 min-w-[200px]">สิ่งที่ตรวจพบหน้างาน (Finding)</th>
+                <th className="py-3 px-3 text-center w-14">ข้อที่</th>
+                <th className="py-3 px-3 w-36">ข้อกำหนด / กฎหมาย</th>
+                <th className="py-3 px-4 min-w-[220px]">สิ่งที่ตรวจพบหน้างาน (Objective Evidence)</th>
                 <th className="py-3 px-3 text-center w-24">ผลประเมิน</th>
-                <th className="py-3 px-4 min-w-[220px]">แนวทางแก้ไขและป้องกัน (CAP)</th>
-                <th className="py-3 px-3 w-28">ผู้รับผิดชอบ</th>
-                <th className="py-3 px-3 text-center w-24">กำหนดเสร็จ</th>
+                <th className="py-3 px-4 min-w-[220px]">สรุปข้อบกพร่อง / ข้อสังเกต (Finding Details)</th>
+                <th className="py-3 px-3 w-40">เอกสาร / WI อ้างอิง</th>
                 <th className="py-3 px-3 text-center w-24">การจัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {displayedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     ไม่พบรายการในหมวดที่เลือก หรือยังไม่มีการบันทึกผลการตรวจ
                   </td>
                 </tr>
               ) : (
                 displayedItems.map((item, idx) => {
-                  const isNC = item.status === 'MA' || item.status === 'MI';
                   return (
                     <tr
                       key={item.id}
@@ -340,11 +335,6 @@ export const AuditSummaryTab: React.FC<AuditSummaryTabProps> = ({
                       {/* Finding */}
                       <td className="py-3 px-4 text-slate-700 leading-relaxed">
                         <p className="line-clamp-3">{item.evidenceRecorded || item.question}</p>
-                        {item.auditorFindingDetail && (
-                          <p className="text-[11px] text-slate-500 mt-1 italic line-clamp-2">
-                            💡 {item.auditorFindingDetail}
-                          </p>
-                        )}
                       </td>
 
                       {/* Status */}
@@ -366,54 +356,32 @@ export const AuditSummaryTab: React.FC<AuditSummaryTabProps> = ({
                         </span>
                       </td>
 
-                      {/* CAP Details */}
+                      {/* Finding Details */}
                       <td className="py-3 px-4 text-slate-700">
-                        {item.capData ? (
-                          <div className="space-y-0.5">
-                            <span className="font-mono font-bold text-rose-800 block text-[11px]">
-                              {item.capData.carNo}
-                            </span>
-                            <p className="text-[11px] text-slate-700 line-clamp-2">
-                              <strong>แก้ไข:</strong> {item.capData.correction}
-                            </p>
-                            <p className="text-[11px] text-slate-600 line-clamp-2">
-                              <strong>ระบบ:</strong> {item.capData.correctiveAction}
-                            </p>
-                          </div>
+                        {item.auditorFindingDetail ? (
+                          <p className="text-[11px] text-slate-800 line-clamp-3">
+                            {item.auditorFindingDetail}
+                          </p>
                         ) : (
-                          <span className="text-slate-400 italic">
-                            {item.status === 'C' ? 'สอดคล้องตามข้อกำหนด' : 'ยังไม่ได้จัดทำแผน'}
+                          <span className="text-slate-400 italic text-[11px]">
+                            {item.status === 'C' ? 'สอดคล้องตามเกณฑ์มาตรฐาน' : 'ยังไม่มีบันทึกเพิ่มเติม'}
                           </span>
                         )}
                       </td>
 
-                      {/* PIC */}
-                      <td className="py-3 px-3 text-slate-600 text-[11px]">
-                        {item.capData?.personInCharge || '-'}
-                      </td>
-
-                      {/* Target Date */}
-                      <td className="py-3 px-3 text-center text-slate-600 font-mono text-[11px]">
-                        {item.capData?.targetDate || '-'}
+                      {/* Reference Docs */}
+                      <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">
+                        {item.referenceDocs || '-'}
                       </td>
 
                       {/* Action */}
-                      <td className="py-3 px-3 text-center space-y-1">
-                        {isNC || item.capData ? (
-                          <button
-                            onClick={() => onOpenCarModal(item)}
-                            className="w-full px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded text-[11px] font-semibold transition cursor-pointer"
-                          >
-                            เปิดดู CAR
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => onOpenExplainModal(item)}
-                            className="w-full px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded text-[11px] font-medium transition cursor-pointer"
-                          >
-                            อธิบาย
-                          </button>
-                        )}
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          onClick={() => onOpenExplainModal(item)}
+                          className="w-full px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-[11px] font-semibold transition cursor-pointer"
+                        >
+                          ดูข้อกำหนด
+                        </button>
                       </td>
                     </tr>
                   );

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   X,
@@ -15,16 +15,24 @@ import {
   Plus,
   Eye,
   Trash2,
+  Building2,
 } from 'lucide-react';
 import { AuditItem } from '../types/audit';
+import { KRC_AUDIT_DEPARTMENTS, assignDepartmentToItem } from '../data/auditDepartments';
 
 interface UploadChecklistModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportChecklist: (newItems: AuditItem[], mode: 'REPLACE' | 'APPEND', title: string) => void;
+  onImportChecklist: (
+    newItems: AuditItem[],
+    mode: 'REPLACE' | 'APPEND' | 'REPLACE_DEPT',
+    title: string,
+    targetDept?: string
+  ) => void;
   onResetToDefault: () => void;
   currentItemsCount: number;
   currentChecklistTitle: string;
+  initialDepartment?: string;
 }
 
 export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
@@ -34,10 +42,28 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
   onResetToDefault,
   currentItemsCount,
   currentChecklistTitle,
+  initialDepartment = 'ALL',
 }) => {
   const [activeTab, setActiveTab] = useState<'EXCEL' | 'AI_DOC' | 'JSON'>('EXCEL');
-  const [importMode, setImportMode] = useState<'REPLACE' | 'APPEND'>('REPLACE');
-  const [checklistName, setChecklistName] = useState<string>('Checklist ที่อัปโหลดใหม่');
+  const [targetDept, setTargetDept] = useState<string>(initialDepartment || 'ALL');
+  const [importMode, setImportMode] = useState<'REPLACE' | 'APPEND' | 'REPLACE_DEPT'>(
+    initialDepartment && initialDepartment !== 'ALL' ? 'REPLACE_DEPT' : 'REPLACE'
+  );
+  const [checklistName, setChecklistName] = useState<string>(
+    initialDepartment && initialDepartment !== 'ALL'
+      ? `Checklist ฝ่าย ${initialDepartment}`
+      : 'Checklist ที่อัปโหลดใหม่'
+  );
+
+  useEffect(() => {
+    if (initialDepartment) {
+      setTargetDept(initialDepartment);
+      if (initialDepartment !== 'ALL') {
+        setImportMode('REPLACE_DEPT');
+        setChecklistName(`Checklist ฝ่าย ${initialDepartment}`);
+      }
+    }
+  }, [initialDepartment]);
 
   // Parsed items preview state
   const [previewItems, setPreviewItems] = useState<AuditItem[]>([]);
@@ -55,9 +81,11 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
 
   // 1. Template Download (Excel & CSV)
   const handleDownloadTemplate = (format: 'xlsx' | 'csv') => {
+    const activeDeptName = targetDept !== 'ALL' ? targetDept : 'Transport';
     const templateRows = [
       {
         'ลำดับ (No)': 1,
+        'ฝ่าย/แผนก (Department)': activeDeptName,
         'รหัสหมวด (Category Code)': 'ก',
         'ชื่อหมวดหมู่ (Category Title)': 'บริบทองค์กรและความปลอดภัย',
         'ข้อกำหนด (Requirement)': 'การกำหนดขอบเขตและบริบทองค์กร (Context & Scope)',
@@ -70,6 +98,7 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
       },
       {
         'ลำดับ (No)': 2,
+        'ฝ่าย/แผนก (Department)': activeDeptName,
         'รหัสหมวด (Category Code)': 'ช',
         'ชื่อหมวดหมู่ (Category Title)': 'การควบคุมการปฏิบัติการและความปลอดภัยลานตู้',
         'ข้อกำหนด (Requirement)': 'การควบคุมสารเคมีอันตรายและฉลาก GHS',
@@ -82,6 +111,7 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
       },
       {
         'ลำดับ (No)': 3,
+        'ฝ่าย/แผนก (Department)': activeDeptName,
         'รหัสหมวด (Category Code)': 'ช',
         'ชื่อหมวดหมู่ (Category Title)': 'การควบคุมการปฏิบัติการและความปลอดภัยลานตู้',
         'ข้อกำหนด (Requirement)': 'การควบคุมสุขภาพและความพร้อมของพนักงานขับรถ',
@@ -98,10 +128,14 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'AuditChecklist');
 
+    const fileName = targetDept !== 'ALL'
+      ? `KRC_Audit_Checklist_Template_${targetDept}.xlsx`
+      : 'KRC_Audit_Checklist_Template.xlsx';
+
     if (format === 'xlsx') {
-      XLSX.writeFile(workbook, 'KRC_Audit_Checklist_Template.xlsx');
+      XLSX.writeFile(workbook, fileName);
     } else {
-      XLSX.writeFile(workbook, 'KRC_Audit_Checklist_Template.csv');
+      XLSX.writeFile(workbook, fileName.replace('.xlsx', '.csv'));
     }
   };
 
@@ -223,6 +257,16 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
             ? rawLaws.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean)
             : ['กฎหมายความปลอดภัย อาชีวอนามัย และสิ่งแวดล้อม'];
 
+          const rowDept = String(
+            row['ฝ่าย/แผนก (Department)'] ||
+              row['ฝ่าย/แผนก'] ||
+              row['แผนก'] ||
+              row['Department'] ||
+              row['Section'] ||
+              ''
+          ).trim();
+          const department = rowDept || (targetDept !== 'ALL' ? targetDept : undefined);
+
           return {
             id,
             categoryCode,
@@ -235,6 +279,7 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
             status: 'PENDING',
             isoClauses,
             lawReferences,
+            department: department || assignDepartmentToItem({ question, requirement, referenceDocs, categoryTitle }),
           };
         });
 
@@ -371,7 +416,17 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
       return;
     }
 
-    onImportChecklist(previewItems, importMode, checklistName);
+    const finalItems = previewItems.map((it) => ({
+      ...it,
+      department: it.department || (targetDept !== 'ALL' ? targetDept : assignDepartmentToItem(it)),
+    }));
+
+    onImportChecklist(
+      finalItems,
+      importMode,
+      checklistName,
+      targetDept !== 'ALL' ? targetDept : undefined
+    );
     onClose();
   };
 
@@ -403,6 +458,50 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Department Selector Banner */}
+        <div className="bg-indigo-50/80 border-b border-indigo-100 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-indigo-950 block">
+                เลือกฝ่าย / แผนกเป้าหมายสำหรับ Checklist ชุดนี้:
+              </span>
+              <p className="text-[11px] text-indigo-700">
+                {targetDept === 'ALL'
+                  ? 'นำเข้าแบบ Global (จัดหมวดหมู่อัตโนมัติ หรืออิงตามคอลัมน์ในไฟล์)'
+                  : `นำเข้าเฉพาะสำหรับฝ่าย "${targetDept}"`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={targetDept}
+              onChange={(e) => {
+                const val = e.target.value;
+                setTargetDept(val);
+                if (val !== 'ALL') {
+                  setImportMode('REPLACE_DEPT');
+                  setChecklistName(`Checklist ฝ่าย ${val}`);
+                } else {
+                  setImportMode('REPLACE');
+                  setChecklistName('Checklist ที่อัปโหลดใหม่');
+                }
+              }}
+              className="px-3 py-1.5 bg-white border border-indigo-300 rounded-xl text-xs font-bold text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs cursor-pointer"
+            >
+              <option value="ALL">🌐 ทุกฝ่าย / รวมทั้งหมด (Global Checklist)</option>
+              {KRC_AUDIT_DEPARTMENTS.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  🏢 {dept.name} ({dept.teamShort} • {dept.date})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Tab Selection */}
@@ -681,23 +780,25 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
 
               {/* Mode Options */}
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="space-y-1">
+                <div className="space-y-1.5 flex-1">
                   <span className="font-bold text-slate-800 block">รูปแบบการนำเข้า:</span>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="importMode"
-                        checked={importMode === 'REPLACE'}
-                        onChange={() => setImportMode('REPLACE')}
-                        className="text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-slate-700 font-semibold">
-                        แทนที่ Checklist ทั้งหมด ({previewItems.length} ข้อใหม่)
-                      </span>
-                    </label>
+                  <div className="flex flex-wrap gap-3 sm:gap-4">
+                    {targetDept !== 'ALL' && (
+                      <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-indigo-200">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          checked={importMode === 'REPLACE_DEPT'}
+                          onChange={() => setImportMode('REPLACE_DEPT')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-indigo-950 font-bold">
+                          แทนที่เฉพาะฝ่าย "{targetDept}" ({previewItems.length} ข้อ)
+                        </span>
+                      </label>
+                    )}
 
-                    <label className="flex items-center gap-1.5 cursor-pointer">
+                    <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
                       <input
                         type="radio"
                         name="importMode"
@@ -705,8 +806,23 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
                         onChange={() => setImportMode('APPEND')}
                         className="text-blue-600 focus:ring-blue-500"
                       />
+                      <span className="text-slate-700 font-semibold">
+                        {targetDept !== 'ALL'
+                          ? `เพิ่มต่อท้ายในฝ่าย "${targetDept}" (+${previewItems.length} ข้อ)`
+                          : `เพิ่มต่อท้ายของเดิม (+${previewItems.length} ข้อ)`}
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                      <input
+                        type="radio"
+                        name="importMode"
+                        checked={importMode === 'REPLACE'}
+                        onChange={() => setImportMode('REPLACE')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
                       <span className="text-slate-700">
-                        เพิ่มต่อท้ายของเดิม (+{previewItems.length} ข้อ)
+                        แทนที่ Checklist ทั้งระบบ ({previewItems.length} ข้อใหม่)
                       </span>
                     </label>
                   </div>

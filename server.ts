@@ -628,6 +628,78 @@ app.post('/api/notifications/send-email', async (req, res) => {
   }
 });
 
+// In-memory / persisted Google Sheets config so all published clients share the same sheet
+let sharedSheetsConfig = {
+  webAppUrl: '',
+  isConnected: false,
+  lastTestedAt: '',
+  lastSyncedAt: '',
+  spreadsheetName: 'KRC_Audit_Database_Master',
+  autoSyncOnFinding: true,
+  autoSyncOnCar: true,
+};
+
+app.get('/api/sheets/config', (req, res) => {
+  res.json({ success: true, config: sharedSheetsConfig });
+});
+
+app.post('/api/sheets/config', (req, res) => {
+  try {
+    const { config } = req.body;
+    if (config) {
+      sharedSheetsConfig = { ...sharedSheetsConfig, ...config };
+    }
+    res.json({ success: true, config: sharedSheetsConfig });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API: Proxy for Google Sheets Web App to bypass CORS and handle redirects seamlessly
+app.post('/api/sheets/proxy', async (req, res) => {
+  try {
+    const { webAppUrl, method = 'GET', payload } = req.body;
+    if (!webAppUrl || typeof webAppUrl !== 'string') {
+      return res.status(400).json({ success: false, error: 'กรุณาระบุ Web App URL ที่ถูกต้อง' });
+    }
+
+    const cleanUrl = webAppUrl.trim();
+    let targetUrl = cleanUrl;
+    let fetchOptions: RequestInit = {
+      method: method.toUpperCase(),
+      redirect: 'follow',
+    };
+
+    if (method.toUpperCase() === 'GET' && payload) {
+      const params = new URLSearchParams(payload);
+      targetUrl = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+    } else if (method.toUpperCase() === 'POST') {
+      fetchOptions = {
+        ...fetchOptions,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload || {}),
+      };
+    }
+
+    const response = await fetch(targetUrl, fetchOptions);
+    const text = await response.text();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = { raw: text, status: 'success' };
+    }
+
+    return res.json({ success: true, data: parsed });
+  } catch (error: any) {
+    console.error('Error in /api/sheets/proxy:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'ไม่สามารถติดต่อ Google Apps Script ได้ กรุณาตรวจสอบ URL หรือสิทธิ์ Anyone',
+    });
+  }
+});
+
 // Vite middleware in dev or static files in prod
 if (process.env.NODE_ENV !== 'production') {
   const vite = await createViteServer({

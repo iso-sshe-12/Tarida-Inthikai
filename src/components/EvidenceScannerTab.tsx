@@ -185,11 +185,15 @@ export const EvidenceScannerTab: React.FC<EvidenceScannerTabProps> = ({
                 onChange={(e) => setSelectedItemId(Number(e.target.value))}
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                {checklistItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    ข้อ #{item.id} [{item.requirement}] - {item.question.slice(0, 75)}...
-                  </option>
-                ))}
+                {checklistItems.length === 0 ? (
+                  <option value={0}>ยังไม่มีข้อตรวจในระบบ (กรุณาอัปโหลด Checklist ในแท็บ "จำลองการ Audit")</option>
+                ) : (
+                  checklistItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      ข้อ #{item.id} [{item.requirement}] - {item.question.slice(0, 75)}...
+                    </option>
+                  ))
+                )}
               </select>
 
               {selectedItem && (
