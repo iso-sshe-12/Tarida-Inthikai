@@ -11,6 +11,7 @@ import { CarModal } from './components/CarModal';
 import { ScenarioModal } from './components/ScenarioModal';
 import { UploadChecklistModal } from './components/UploadChecklistModal';
 import { TeamManagementModal } from './components/TeamManagementModal';
+import { TeamManagementTab } from './components/TeamManagementTab';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { DatabaseSettingsModal } from './components/DatabaseSettingsModal';
 import { INITIAL_CHECKLIST_DATA, ChecklistItem } from './data/auditChecklistData';
@@ -128,7 +129,7 @@ export default function App() {
   }, [checklistItems, checklistTitle, isCustomChecklist]);
 
   const [activeScenario, setActiveScenario] = useState<MockScenario>(defaultScenario);
-  const [activeTab, setActiveTab] = useState<'SCHEDULE' | 'CHECKLIST' | 'EVIDENCE' | 'EXPLAINER' | 'SUMMARY'>('SCHEDULE');
+  const [activeTab, setActiveTab] = useState<'SCHEDULE' | 'CHECKLIST' | 'EVIDENCE' | 'EXPLAINER' | 'SUMMARY' | 'TEAM'>('SCHEDULE');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [roleMode, setRoleMode] = useState<'AUDITOR' | 'AUDITEE'>('AUDITOR');
 
@@ -340,17 +341,23 @@ export default function App() {
     setIsDatabaseModalOpen(true);
   };
 
-  // Bulk Assign Handler
+  // Bulk Assign Handler (Supports both Department and Category delegation)
   const handleBulkAssign = (
-    categoryCode: string,
+    deptOrCategory: string,
     auditorId: string,
     auditorName: string,
     auditeeId: string,
     auditeeName: string
   ) => {
+    // 1. Update all matching checklist items
     setChecklistItems((prev) =>
       prev.map((item) => {
-        if (categoryCode === 'ALL' || item.categoryCode === categoryCode) {
+        const itemDept = item.department || assignDepartmentToItem(item);
+        if (
+          deptOrCategory === 'ALL' ||
+          itemDept === deptOrCategory ||
+          item.categoryCode === deptOrCategory
+        ) {
           return {
             ...item,
             assignedAuditorId: auditorId || item.assignedAuditorId,
@@ -362,6 +369,41 @@ export default function App() {
         return item;
       })
     );
+
+    // 2. Synchronize to Audit Schedule Plan
+    setAuditSchedule((prev) =>
+      prev.map((s) => {
+        if (
+          deptOrCategory === 'ALL' ||
+          s.department.includes(deptOrCategory) ||
+          deptOrCategory.includes(s.department)
+        ) {
+          return {
+            ...s,
+            leadAuditor: auditorName || s.leadAuditor,
+            auditeeName: auditeeName || s.auditeeName,
+          };
+        }
+        return s;
+      })
+    );
+
+    const targetLabel = deptOrCategory === 'ALL' ? 'ทุกฝ่าย' : `ฝ่าย "${deptOrCategory}"`;
+    setToastMessage(`✓ มอบหมายผู้ตรวจและ Auditee สำหรับ ${targetLabel} เรียบร้อยแล้ว`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Reset Team Members to Default
+  const handleResetTeamMembers = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_MEMBERS);
+    } catch (e) {
+      console.warn(e);
+    }
+    setTeamMembers(DEFAULT_TEAM_MEMBERS);
+    setCurrentUser(DEFAULT_TEAM_MEMBERS[0]);
+    setToastMessage('✓ รีเซ็ตรายชื่อทีม Auditor & Auditee กลับเป็นค่าเริ่มต้นมาตรฐาน K.R.C. สำเร็จ');
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Switch persona handler
@@ -799,6 +841,22 @@ export default function App() {
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>รายงานสรุปผลการตรวจ (Audit Summary Report)</span>
           </button>
+
+          {/* Team Management Tab */}
+          <button
+            onClick={() => setActiveTab('TEAM')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'TEAM'
+                ? 'border-purple-600 text-purple-700 bg-white/70 rounded-t-xl shadow-xs'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+            }`}
+          >
+            <Users className="w-4 h-4 text-purple-600" />
+            <span>ทีมงาน Auditor &amp; Auditee</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+              {teamMembers.length}
+            </span>
+          </button>
         </div>
 
         {/* Tab Views */}
@@ -812,6 +870,9 @@ export default function App() {
             onJumpToChecklist={() => setActiveTab('CHECKLIST')}
             isSheetsConnected={sheetsConfig.isConnected}
             onSyncAllToSheets={handleSyncAllSchedulesToSheets}
+            onOpenTeamModal={() => {
+              setActiveTab('TEAM');
+            }}
           />
         )}
 
@@ -838,6 +899,9 @@ export default function App() {
             onResetToDefault={handleResetToDefault}
             roleMode={roleMode}
             onToggleRole={setRoleMode}
+            onOpenTeamModal={() => {
+              setActiveTab('TEAM');
+            }}
           />
         )}
 
@@ -857,6 +921,21 @@ export default function App() {
             items={checklistItems}
             onOpenCarModal={(item) => setCarItem(item)}
             onOpenExplainModal={(item) => setExplainItem(item)}
+          />
+        )}
+
+        {activeTab === 'TEAM' && (
+          <TeamManagementTab
+            teamMembers={teamMembers}
+            onUpdateTeamMembers={setTeamMembers}
+            items={checklistItems}
+            onBulkAssign={handleBulkAssign}
+            currentUser={currentUser}
+            onSwitchCurrentUser={handleSwitchCurrentUser}
+            onOpenDatabaseModal={handleOpenDatabaseModal}
+            scheduleItems={auditSchedule}
+            onUpdateSchedule={handleUpdateSchedule}
+            onResetTeamToDefault={handleResetTeamMembers}
           />
         )}
       </main>
@@ -920,6 +999,9 @@ export default function App() {
         currentUser={currentUser}
         onSwitchCurrentUser={handleSwitchCurrentUser}
         onOpenDatabaseModal={handleOpenDatabaseModal}
+        scheduleItems={auditSchedule}
+        onUpdateSchedule={handleUpdateSchedule}
+        onResetTeamToDefault={handleResetTeamMembers}
       />
 
       <NotificationSettingsModal

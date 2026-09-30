@@ -133,11 +133,11 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Team Management Button */}
             <button
               onClick={onOpenTeamModal}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg shadow-xs transition border border-slate-700 cursor-pointer"
-              title="จัดการทีม Auditor & Auditee และมอบหมายหมวดตรวจ"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-900/80 hover:bg-indigo-800 text-indigo-100 text-xs font-bold rounded-lg shadow-xs transition border border-indigo-500/50 cursor-pointer"
+              title="จัดการทีม Auditor & Auditee และมอบหมาย 15 ฝ่าย"
             >
-              <Users className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden md:inline">ทีม & สิทธิ์</span>
+              <Users className="w-3.5 h-3.5 text-indigo-300" />
+              <span>ทีม Auditor &amp; Auditee</span>
             </button>
 
             {/* Notification Settings Button */}

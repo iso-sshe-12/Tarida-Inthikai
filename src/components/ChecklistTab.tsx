@@ -37,6 +37,9 @@ import {
   Users,
   Plus,
   Trash2,
+  Table2,
+  LayoutList,
+  FileText,
 } from 'lucide-react';
 
 interface ChecklistTabProps {
@@ -57,6 +60,7 @@ interface ChecklistTabProps {
   onToggleRole?: (role: 'AUDITOR' | 'AUDITEE') => void;
   selectedDepartment?: string;
   onSelectDepartment?: (deptId: string) => void;
+  onOpenTeamModal?: () => void;
 }
 
 export const ChecklistTab: React.FC<ChecklistTabProps> = ({
@@ -77,6 +81,7 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
   onToggleRole,
   selectedDepartment,
   onSelectDepartment,
+  onOpenTeamModal,
 }) => {
   const [internalDept, setInternalDept] = useState<string>('ALL');
   const activeDept = selectedDepartment !== undefined ? selectedDepartment : internalDept;
@@ -85,7 +90,7 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
     setInternalDept(deptId);
   };
 
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'TABLE' | 'CARDS'>('TABLE');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [highPriorityOnly, setHighPriorityOnly] = useState<boolean>(false);
   const [expandedItemId, setExpandedItemId] = useState<number | null>(null);
@@ -116,21 +121,7 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
     return KRC_AUDIT_DEPARTMENTS.find((d) => d.id === activeDept) || null;
   }, [activeDept]);
 
-  // Dynamic categories from items
-  const dynamicCategories = useMemo(() => {
-    const map = new Map<string, string>();
-    items.forEach((it) => {
-      const itemDept = it.department || assignDepartmentToItem(it);
-      if (activeDept === 'ALL' || itemDept === activeDept) {
-        if (!map.has(it.categoryCode)) {
-          map.set(it.categoryCode, it.categoryTitle);
-        }
-      }
-    });
-    return Array.from(map.entries()).map(([code, title]) => ({ code, title }));
-  }, [items, activeDept]);
-
-  // Export current checklist to Excel
+  // Export current checklist to Excel (Matching the 4-column audit layout)
   const handleExportToExcel = () => {
     const itemsToExport = items.filter((it) => {
       if (activeDept === 'ALL') return true;
@@ -139,23 +130,21 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
     });
 
     const exportRows = itemsToExport.map((it) => ({
-      'ลำดับ (No)': it.id,
+      'No.': it.id,
+      'ข้อกำหนด (Requirement)': it.requirement || it.isoClauses?.join('\n') || '',
+      'คำถาม (Audit Questions)': it.question,
+      'Mannual/Procedure/WI/SD/Form': it.referenceDocs,
       'ฝ่าย/แผนก (Department)': it.department || assignDepartmentToItem(it),
-      'รหัสหมวด': it.categoryCode,
-      'ชื่อหมวด': it.categoryTitle,
-      'ข้อกำหนด': it.requirement,
-      'ข้อคำถามในการตรวจ': it.question,
-      'เอกสารอ้างอิง': it.referenceDocs,
-      'หลักฐานที่ต้องตรวจสอบ': it.requiredEvidence,
       'ระดับความสำคัญ': it.priority,
       'ผลการตรวจ (Status)': it.status,
       'คำชี้แจงจาก Auditee': it.auditeeResponse?.explanation || '',
       'ผู้ส่งหลักฐาน (Auditee)': it.auditeeResponse?.responderName || '',
-      'บันทึกหลักฐานที่พบ': it.evidenceRecorded || '',
+      'บันทึกหลักฐานที่พบ (Auditor Finding)': it.evidenceRecorded || '',
       'บทวิเคราะห์ Lead Auditor': it.auditorFindingDetail || '',
       'ข้อกำหนด ISO': it.isoClauses?.join(', ') || '',
       'กฎหมายที่เกี่ยวข้อง': it.lawReferences?.join(', ') || '',
       'ต้องการใบ CAR': it.capRequired ? 'YES' : 'NO',
+      'เลขที่ CAR': it.capData?.carNo || '',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
@@ -168,13 +157,10 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
     );
   };
 
-  // Filter items
+  // Filter items (No category division as requested)
   const filteredItems = items.filter((item) => {
     const itemDept = item.department || assignDepartmentToItem(item);
     if (activeDept !== 'ALL' && itemDept !== activeDept) {
-      return false;
-    }
-    if (selectedCategory !== 'ALL' && item.categoryCode !== selectedCategory) {
       return false;
     }
     if (statusFilter !== 'ALL' && item.status !== statusFilter) {
@@ -211,7 +197,8 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
       const matchEvidence = (item.evidenceRecorded || '').toLowerCase().includes(q);
       const matchAuditee = (item.auditeeResponse?.explanation || '').toLowerCase().includes(q);
       const matchFinding = (item.auditorFindingDetail || '').toLowerCase().includes(q);
-      return matchId || matchReq || matchQuestion || matchDoc || matchEvidence || matchAuditee || matchFinding;
+      const matchDept = itemDept.toLowerCase().includes(q);
+      return matchId || matchReq || matchQuestion || matchDoc || matchEvidence || matchAuditee || matchFinding || matchDept;
     }
     return true;
   });
@@ -310,6 +297,326 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
       handleAiEvaluate(updatedItem, submission);
     }
   };
+
+  // Helper to render Requirement column with line breaks
+  const renderRequirementText = (requirement: string, isoClauses?: string[]) => {
+    const text = requirement || (isoClauses && isoClauses.length > 0 ? isoClauses.join('\n') : '-');
+    return (
+      <div className="font-semibold text-slate-800 whitespace-pre-line text-xs leading-relaxed">
+        {text}
+      </div>
+    );
+  };
+
+  // Helper to render Audit Questions column (Question + '► หลักฐานที่ขอดู: ...')
+  const renderAuditQuestionContent = (question: string, requiredEvidence?: string) => {
+    if (question.includes('หลักฐานที่ขอดู:') || question.includes('►')) {
+      const markerRegex = /(?=►|\n►|หลักฐานที่ขอดู:)/i;
+      const index = question.search(markerRegex);
+      if (index !== -1) {
+        const qPart = question.slice(0, index).trim();
+        const evPart = question.slice(index).replace(/^[►\s]*หลักฐานที่ขอดู:\s*/i, '').trim();
+        return (
+          <div className="space-y-1.5 text-xs">
+            <div className="text-slate-900 font-medium leading-relaxed whitespace-pre-line">
+              {qPart}
+            </div>
+            {evPart && (
+              <div className="text-[11px] text-slate-900 bg-slate-100/90 p-2 rounded-lg border border-slate-200 leading-relaxed font-normal">
+                <strong className="text-slate-950 font-bold">► หลักฐานที่ขอดู:</strong>{' '}
+                <span>{evPart}</span>
+              </div>
+            )}
+          </div>
+        );
+      }
+    }
+
+    return (
+      <div className="space-y-1.5 text-xs">
+        <div className="text-slate-900 font-medium leading-relaxed whitespace-pre-line">
+          {question}
+        </div>
+        {requiredEvidence && requiredEvidence !== 'บันทึกและหลักฐานการทำงาน' && (
+          <div className="text-[11px] text-slate-900 bg-slate-100/90 p-2 rounded-lg border border-slate-200 leading-relaxed font-normal">
+            <strong className="text-slate-950 font-bold">► หลักฐานที่ขอดู:</strong>{' '}
+            <span>{requiredEvidence}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Helper to render Reference Documents as bullets
+  const renderReferenceDocsList = (docs: string) => {
+    if (!docs || docs.trim() === '' || docs === '-') {
+      return <span className="text-slate-400">-</span>;
+    }
+
+    const lines = docs
+      .split(/[\n,;]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    return (
+      <div className="space-y-1 font-mono text-[11px] leading-snug">
+        {lines.map((line, idx) => (
+          <div key={idx} className="text-slate-800 flex items-start gap-1">
+            <span className="text-slate-600 font-bold">•</span>
+            <span>{line.replace(/^[•\-\*]\s*/, '')}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Helper to render full evaluation panel
+  const renderItemEvaluationPanel = (item: AuditItem, isEvaluating: boolean) => (
+    <div className="space-y-4">
+      {/* AUDITEE SECTION: คำชี้แจง & แนบหลักฐานจาก AUDITEE */}
+      <div className={`p-4 rounded-xl border transition-all ${
+        roleMode === 'AUDITEE'
+          ? 'bg-gradient-to-br from-emerald-50/80 via-teal-50/50 to-white border-emerald-300 shadow-xs'
+          : 'bg-emerald-50/40 border-emerald-200/90'
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-emerald-600 text-white shadow-xs">
+              <UserCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-emerald-950">
+                  คำชี้แจง & หลักฐานจาก Auditee (ผู้รับการตรวจ / หน้างาน):
+                </span>
+                {item.auditeeResponse?.submittedAt && (
+                  <span className="text-[10px] text-emerald-700 bg-emerald-100/70 px-2 py-0.2 rounded font-medium">
+                    ยื่นเมื่อ {item.auditeeResponse.submittedAt}
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] text-emerald-800">
+                {item.auditeeResponse
+                  ? `ผู้ส่ง: ${item.auditeeResponse.responderName || 'ตัวแทนหน่วยงาน'} (${item.auditeeResponse.responderDept || 'แผนกที่เกี่ยวข้อง'})`
+                  : 'คลิกปุ่มสีเขียวเพื่อพิมพ์คำชี้แจง ถ่ายรูปหน้างานจริง หรือแนบเอกสาร'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setAuditeeModalItem(item)}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer self-start sm:self-auto ${
+              item.auditeeResponse
+                ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50'
+            }`}
+          >
+            <Camera className="w-4 h-4 text-amber-300" />
+            <span>
+              {item.auditeeResponse
+                ? 'แก้ไขคำชี้แจง / เพิ่มรูปภาพ'
+                : '📸 Auditee ตอบ & แนบรูปหลักฐาน'}
+            </span>
+          </button>
+        </div>
+
+        {item.auditeeResponse ? (
+          <div className="space-y-2.5 text-xs pt-1">
+            {item.auditeeResponse.explanation && (
+              <div className="p-3 bg-white rounded-xl border border-emerald-200/90 text-slate-800 leading-relaxed font-medium shadow-xs">
+                <span className="text-[11px] font-bold text-emerald-900 block mb-0.5">
+                  ข้อเท็จจริง / คำชี้แจง:
+                </span>
+                <p className="whitespace-pre-line">{item.auditeeResponse.explanation}</p>
+              </div>
+            )}
+
+            {item.auditeeResponse.attachments && item.auditeeResponse.attachments.length > 0 && (
+              <div>
+                <span className="text-[11px] font-bold text-emerald-900 block mb-1.5">
+                  รูปถ่ายและเอกสารแนบ ({item.auditeeResponse.attachments.length} รายการ):
+                </span>
+                <div className="flex flex-wrap gap-2.5">
+                  {item.auditeeResponse.attachments.map((att) => (
+                    <div
+                      key={att.id}
+                      className="flex items-center gap-2 p-1.5 bg-white rounded-xl border border-emerald-200/80 shadow-xs hover:border-emerald-400 transition"
+                    >
+                      {att.type === 'IMAGE' && att.dataUrl ? (
+                        <div
+                          onClick={() => setZoomedImage(att.dataUrl!)}
+                          className="flex items-center gap-2 cursor-pointer group"
+                          title="คลิกเพื่อดูรูปภาพขนาดใหญ่"
+                        >
+                          <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                            <img
+                              src={att.dataUrl}
+                              alt={att.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition"
+                            />
+                          </div>
+                          <div className="text-[11px]">
+                            <span className="font-semibold text-slate-800 underline block max-w-[140px] truncate">
+                              {att.name}
+                            </span>
+                            <span className="text-[10px] text-emerald-700 font-medium">
+                              คลิกเพื่อดูรูปขยาย
+                            </span>
+                          </div>
+                        </div>
+                      ) : att.type === 'LINK' ? (
+                        <a
+                          href={att.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 text-[11px] text-blue-700 hover:text-blue-900 hover:underline px-1.5"
+                        >
+                          <LinkIcon className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="max-w-[140px] truncate font-semibold">
+                            {att.name}
+                          </span>
+                          <ExternalLink className="w-3 h-3 text-slate-400" />
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-700 px-2 font-medium">
+                          📄 {att.name}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div
+            onClick={() => setAuditeeModalItem(item)}
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-white/70 hover:bg-white rounded-xl border border-dashed border-emerald-300 text-xs text-emerald-900 cursor-pointer transition"
+          >
+            <div className="flex items-center gap-2">
+              <Camera className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-medium text-slate-600">
+                ยังไม่มีการส่งคำชี้แจงหรือหลักฐานจาก Auditee ในข้อนี้
+              </span>
+            </div>
+            <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
+              <span>คลิกที่นี่เพื่อตอบและแนบหลักฐาน</span>
+              <span>→</span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Auditor Findings & Evidence Input */}
+      <div className="pt-2 space-y-3">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+            <span>
+              {roleMode === 'AUDITOR'
+                ? 'บันทึกสิ่งตรวจพบของ Lead Auditor (Finding & Objective Evidence):'
+                : 'บันทึกสรุปผลการตรวจจากผู้ตรวจ (Auditor Record):'}
+            </span>
+            <span className="text-[11px] font-normal text-slate-400">
+              {roleMode === 'AUDITOR' ? 'พิมพ์ข้อเท็จจริง หรือกดให้น้องออดิตช่วยจำลองการตรวจ' : 'อ้างอิงสำหรับการออดิต'}
+            </span>
+          </label>
+          <textarea
+            rows={2}
+            value={item.evidenceRecorded || ''}
+            onChange={(e) => handleEvidenceChange(item, e.target.value)}
+            placeholder="ระบุสิ่งที่พบหน้างาน เช่น ตรวจสอบเอกสารฉบับอนุมัติแล้ว, สุ่มตรวจ พขร. 5 นายมีผลเป่าแอลกอฮอล์เป็นศูนย์..."
+            className="w-full text-xs p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+          />
+        </div>
+
+        {/* Action Triggers */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => handleAiEvaluate(item)}
+              disabled={isEvaluating}
+              className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>
+                {isEvaluating
+                  ? 'น้องออดิตกำลังประเมิน...'
+                  : item.auditeeResponse
+                  ? 'ให้น้องออดิตตรวจหลักฐานที่ Auditee ส่งมา'
+                  : 'ให้น้องออดิตประเมินแทนฉัน'}
+              </span>
+            </button>
+
+            <button
+              onClick={() => onOpenExplainModal(item)}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition active:scale-95 cursor-pointer flex items-center gap-1.5 border border-slate-300"
+            >
+              <MessageCircleQuestion className="w-3.5 h-3.5 text-blue-600" />
+              <span>อธิบายแทนฉัน (เมื่อ Auditee สงสัย)</span>
+            </button>
+
+            {(item.capRequired || item.capData || item.status === 'MA' || item.status === 'MI') && (
+              <button
+                onClick={() => onOpenCarModal(item)}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-semibold rounded-xl transition active:scale-95 cursor-pointer flex items-center gap-1.5 border border-rose-300"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                <span>ดู/แก้ร่าง CAR & CAP</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Auditor Finding Detail Analysis */}
+      {item.auditorFindingDetail && (
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1 text-xs">
+          <div className="font-bold text-slate-800 flex items-center gap-1.5">
+            <FileCheck className="w-4 h-4 text-blue-600" />
+            <span>บทวิเคราะห์ข้อบกพร่องเชิงระบบ (Lead Auditor Analysis):</span>
+          </div>
+          <p className="text-slate-700 leading-relaxed whitespace-pre-line">{item.auditorFindingDetail}</p>
+        </div>
+      )}
+
+      {/* ISO Clauses & Law References */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div className="bg-white p-3 rounded-xl border border-slate-200">
+          <span className="font-bold text-blue-900 block mb-1">
+            ข้อกำหนด ISO ที่เกี่ยวข้อง:
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {item.isoClauses && item.isoClauses.length > 0 ? (
+              item.isoClauses.map((c, i) => (
+                <span key={i} className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200 text-[11px]">
+                  {c}
+                </span>
+              ))
+            ) : (
+              <span className="text-slate-400 text-[11px]">{item.requirement || 'ISO 9001 / ISO 14001 / ISO 45001'}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-3 rounded-xl border border-slate-200">
+          <span className="font-bold text-slate-900 block mb-1">
+            กฎหมายความปลอดภัย/ขนส่งที่เกี่ยวข้อง:
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {item.lawReferences && item.lawReferences.length > 0 ? (
+              item.lawReferences.map((l, i) => (
+                <span key={i} className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                  {l}
+                </span>
+              ))
+            ) : (
+              <span className="text-slate-400 text-[11px]">กฎหมายความปลอดภัย อาชีวอนามัย และสิ่งแวดล้อมไทย</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   // Counts for Auditee filter
   const auditeePendingCount = items.filter((i) => !i.auditeeResponse?.explanation).length;
@@ -593,6 +900,17 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                   <span>ส่งออก Excel</span>
                 </button>
 
+                {onOpenTeamModal && (
+                  <button
+                    onClick={onOpenTeamModal}
+                    className="px-3 py-2 bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-semibold rounded-xl border border-indigo-500/50 transition active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    title="จัดการหรือมอบหมายทีมตรวจฝ่ายนี้"
+                  >
+                    <Users className="w-3.5 h-3.5 text-indigo-200" />
+                    <span>จัดการทีมตรวจ</span>
+                  </button>
+                )}
+
                 {(departmentCounts[currentDeptInfo.id] || 0) > 0 && onClearDepartmentItems && (
                   <button
                     onClick={() => {
@@ -668,6 +986,18 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
               <span>ส่งออก Excel</span>
             </button>
 
+            {/* Manage Team Button */}
+            {onOpenTeamModal && (
+              <button
+                onClick={onOpenTeamModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl text-xs font-bold border border-indigo-200 shadow-xs transition active:scale-95 cursor-pointer"
+                title="จัดการทีม Auditor & Auditee และมอบหมายความรับผิดชอบ"
+              >
+                <Users className="w-3.5 h-3.5 text-indigo-600" />
+                <span>ทีม Auditor &amp; Auditee</span>
+              </button>
+            )}
+
             {/* Clear All Items Button */}
             {items.length > 0 && onClearAllItems && (
               <button
@@ -690,49 +1020,47 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
           </div>
         </div>
 
-        {/* Categories scrollable bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-          <button
-            onClick={() => setSelectedCategory('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition cursor-pointer ${
-              selectedCategory === 'ALL'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            ทุกหมวด ({items.length})
-          </button>
-
-          {dynamicCategories.map((cat) => {
-            const countInCat = items.filter((i) => i.categoryCode === cat.code).length;
-            const evalInCat = items.filter(
-              (i) => i.categoryCode === cat.code && i.status !== 'PENDING'
-            ).length;
-            const isSelected = selectedCategory === cat.code;
-            return (
+        {/* Controls Toolbar: View Mode Toggle & Summary (No Category grouping as requested) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+          {/* View Mode Toggle: Table (default) vs Cards */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-700">รูปแบบการแสดง:</span>
+            <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200 shadow-xs">
               <button
-                key={cat.code}
-                onClick={() => setSelectedCategory(cat.code)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition flex items-center gap-1.5 cursor-pointer ${
-                  isSelected
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                onClick={() => setViewMode('TABLE')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'TABLE'
+                    ? 'bg-white text-blue-900 shadow-xs ring-1 ring-blue-300'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
+                title="ตาราง Checklist ตามแบบฟอร์ม"
               >
-                <span className="font-bold">หมวด {cat.code}:</span>
-                <span className="max-w-[140px] truncate">{cat.title}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                    isSelected
-                      ? 'bg-blue-800 text-blue-200'
-                      : 'bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  {evalInCat}/{countInCat}
-                </span>
+                <Table2 className="w-3.5 h-3.5 text-blue-600" />
+                <span>ตาราง Audit (ตามแบบฟอร์ม)</span>
               </button>
-            );
-          })}
+              <button
+                onClick={() => setViewMode('CARDS')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'CARDS'
+                    ? 'bg-white text-blue-900 shadow-xs ring-1 ring-blue-300'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="มุมมองการ์ดแบบละเอียด"
+              >
+                <LayoutList className="w-3.5 h-3.5 text-indigo-600" />
+                <span>การ์ดละเอียด</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium">
+            แสดง <strong className="text-slate-900">{filteredItems.length}</strong> จากทั้งหมด {items.length} รายการ
+            {activeDept !== 'ALL' && (
+              <span className="ml-1.5 text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                ฝ่าย: {activeDept}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Search & Quick Filters */}
@@ -847,7 +1175,471 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
               </p>
             </div>
           )
+        ) : viewMode === 'TABLE' ? (
+          /* ========================================================================= */
+          /* 📋 AUDIT TABLE VIEW (ตามแบบฟอร์ม Audit Checklist มาตรฐาน K.R.C. ไม่แบ่งหมวด) */
+          /* ========================================================================= */
+          <div className="overflow-x-auto bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-900 text-white font-bold text-xs tracking-wider divide-x divide-slate-800">
+                  <th className="py-3.5 px-3 w-14 text-center">No.</th>
+                  <th className="py-3.5 px-3 w-44">ข้อกำหนด (Requirement)</th>
+                  <th className="py-3.5 px-4 min-w-[280px]">คำถาม (Audit Questions) &amp; ข้อตรวจ</th>
+                  <th className="py-3.5 px-3 w-44">Mannual/Procedure/WI/SD/Form</th>
+                  <th className="py-3.5 px-3 w-28 text-center">ฝ่าย/แผนก</th>
+                  <th className="py-3.5 px-3 min-w-[180px]">หลักฐานจาก Auditee</th>
+                  <th className="py-3.5 px-3 min-w-[210px] text-center">
+                    {roleMode === 'AUDITOR' ? 'ผลการตรวจ (Audit Finding)' : 'สถานะการตรวจ'}
+                  </th>
+                  <th className="py-3.5 px-3 w-32 text-center">การจัดการ &amp; AI</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {filteredItems.map((item) => {
+                  const isExpanded = expandedItemId === item.id;
+                  const isEvaluating = evaluatingItemId === item.id;
+                  const itemDeptName = item.department || assignDepartmentToItem(item);
+
+                  // Extract requirement lines
+                  const reqLines = item.requirement
+                    ? item.requirement.split('\n').filter(Boolean)
+                    : item.isoClauses || [];
+
+                  // Extract doc lines
+                  const docLines = item.referenceDocs
+                    ? item.referenceDocs.split('\n').filter(Boolean)
+                    : [];
+
+                  // Extract question & evidence to check
+                  let questionMain = item.question;
+                  let evidencePrompt = item.requiredEvidence;
+                  if (item.question.includes('หลักฐานที่ขอดู:')) {
+                    const parts = item.question.split(/หลักฐานที่ขอดู:/i);
+                    questionMain = parts[0].trim();
+                    evidencePrompt = parts[1].trim();
+                  }
+
+                  const rowStatusClass =
+                    item.status === 'MA'
+                      ? 'bg-rose-50/40 hover:bg-rose-50/70 border-l-4 border-l-rose-500'
+                      : item.status === 'MI'
+                      ? 'bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-500'
+                      : item.status === 'C'
+                      ? 'bg-emerald-50/30 hover:bg-emerald-50/60 border-l-4 border-l-emerald-500'
+                      : item.status === 'OBS'
+                      ? 'bg-purple-50/30 hover:bg-purple-50/60 border-l-4 border-l-purple-500'
+                      : item.status === 'OFI'
+                      ? 'bg-cyan-50/30 hover:bg-cyan-50/60 border-l-4 border-l-cyan-500'
+                      : 'hover:bg-slate-50/80 border-l-4 border-l-transparent';
+
+                  return (
+                    <React.Fragment key={item.id}>
+                      <tr className={`transition-colors divide-x divide-slate-100 ${rowStatusClass}`}>
+                        {/* 1. No. */}
+                        <td className="py-3.5 px-3 text-center align-top font-mono">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded-md shadow-xs">
+                              #{item.id}
+                            </span>
+                            {item.priority === 'HIGH' && (
+                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap">
+                                ★ เสี่ยงสูง
+                              </span>
+                            )}
+                            <button
+                              onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                              className="mt-1 text-[10px] text-slate-500 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                              title={isExpanded ? 'ย่อรายละเอียด' : 'ดูบทวิเคราะห์ Lead Auditor'}
+                            >
+                              <span>{isExpanded ? 'ย่อ' : 'ขยาย'}</span>
+                              {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* 2. ข้อกำหนด (Requirement) */}
+                        <td className="py-3.5 px-3 align-top">
+                          <div className="space-y-1">
+                            {reqLines.length > 0 ? (
+                              reqLines.map((line, idx) => (
+                                <div
+                                  key={idx}
+                                  className="text-[11px] font-semibold text-blue-900 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-200/80 leading-snug"
+                                >
+                                  {line}
+                                </div>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-slate-500">ISO 9001/45001</span>
+                            )}
+                            {item.remarks && (
+                              <span className="inline-block text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 mt-0.5">
+                                {item.remarks}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 3. คำถาม (Audit Questions & Evidence) */}
+                        <td className="py-3.5 px-4 align-top">
+                          <div className="space-y-2">
+                            <p className="text-xs font-bold text-slate-900 leading-relaxed whitespace-pre-line">
+                              {questionMain}
+                            </p>
+                            {evidencePrompt && (
+                              <div className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200/90 text-emerald-950 text-[11px] leading-relaxed">
+                                <span className="font-bold flex items-center gap-1 text-emerald-900 mb-0.5">
+                                  <FileCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                                  <span>หลักฐานที่ต้องสุ่มตรวจ:</span>
+                                </span>
+                                <span className="text-slate-800">{evidencePrompt}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 4. Mannual/Procedure/WI/SD/Form */}
+                        <td className="py-3.5 px-3 align-top font-mono">
+                          <div className="space-y-1">
+                            {docLines.length > 0 ? (
+                              docLines.map((doc, idx) => (
+                                <div
+                                  key={idx}
+                                  className="text-[11px] font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 leading-snug flex items-center gap-1"
+                                >
+                                  <span className="text-indigo-600 text-[10px]">•</span>
+                                  <span>{doc.replace(/^[•\-\*]\s*/, '')}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">-</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 5. ฝ่าย/แผนก (Department) */}
+                        <td className="py-3.5 px-3 text-center align-top">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-900 border border-indigo-200 whitespace-nowrap">
+                            <Building2 className="w-3 h-3 text-indigo-600 shrink-0" />
+                            <span>{itemDeptName}</span>
+                          </span>
+                        </td>
+
+                        {/* 6. หลักฐานจาก Auditee */}
+                        <td className="py-3.5 px-3 align-top">
+                          <div className="space-y-1.5">
+                            {item.auditeeResponse ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                                    <span>ส่งหลักฐานแล้ว</span>
+                                  </span>
+                                  {item.auditeeResponse.attachments && item.auditeeResponse.attachments.length > 0 && (
+                                    <span className="text-[10px] text-emerald-800 font-semibold">
+                                      ({item.auditeeResponse.attachments.length} รูป/ไฟล์)
+                                    </span>
+                                  )}
+                                </div>
+
+                                {item.auditeeResponse.explanation && (
+                                  <p className="text-[11px] text-slate-700 line-clamp-2 italic bg-slate-50 p-1.5 rounded border border-slate-200">
+                                    "{item.auditeeResponse.explanation}"
+                                  </p>
+                                )}
+
+                                {/* Thumbnails preview */}
+                                {item.auditeeResponse.attachments && item.auditeeResponse.attachments.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 pt-0.5">
+                                    {item.auditeeResponse.attachments.slice(0, 3).map((att) =>
+                                      att.type === 'IMAGE' && att.dataUrl ? (
+                                        <img
+                                          key={att.id}
+                                          src={att.dataUrl}
+                                          alt={att.name}
+                                          onClick={() => setZoomedImage(att.dataUrl!)}
+                                          className="w-7 h-7 object-cover rounded border border-slate-300 hover:scale-110 transition cursor-pointer shadow-xs"
+                                          title="คลิกเพื่อดูรูปขยาย"
+                                        />
+                                      ) : null
+                                    )}
+                                    {item.auditeeResponse.attachments.length > 3 && (
+                                      <span className="text-[10px] text-slate-500 self-center">
+                                        +{item.auditeeResponse.attachments.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                <button
+                                  onClick={() => setAuditeeModalItem(item)}
+                                  className="text-[10px] text-emerald-700 hover:text-emerald-900 font-semibold underline block pt-0.5 cursor-pointer"
+                                >
+                                  แก้ไขคำชี้แจง / เพิ่มรูป
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setAuditeeModalItem(item)}
+                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1 w-full justify-center"
+                              >
+                                <Camera className="w-3.5 h-3.5 text-amber-200" />
+                                <span>Auditee ตอบ & แนบรูป</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 7. ผลการตรวจ (Audit Finding / Status) */}
+                        <td className="py-3.5 px-3 align-top text-center">
+                          {roleMode === 'AUDITOR' ? (
+                            <div className="space-y-1.5 inline-block text-left w-full">
+                              {/* 1-Click Status Change Group */}
+                              <div className="grid grid-cols-3 gap-1">
+                                <button
+                                  onClick={() => handleStatusChange(item, 'C')}
+                                  className={`px-1.5 py-1 rounded text-[10px] font-bold transition cursor-pointer text-center ${
+                                    item.status === 'C'
+                                      ? 'bg-emerald-600 text-white shadow-xs ring-1 ring-emerald-400'
+                                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300'
+                                  }`}
+                                  title="C (Conforming - สอดคล้อง)"
+                                >
+                                  ✓ C
+                                </button>
+                                <button
+                                  onClick={() => handleStatusChange(item, 'MA')}
+                                  className={`px-1.5 py-1 rounded text-[10px] font-bold transition cursor-pointer text-center ${
+                                    item.status === 'MA'
+                                      ? 'bg-rose-600 text-white shadow-xs ring-1 ring-rose-400'
+                                      : 'bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-300'
+                                  }`}
+                                  title="Major NC (ไม่สอดคล้องขั้นรุนแรง)"
+                                >
+                                  ✕ MA
+                                </button>
+                                <button
+                                  onClick={() => handleStatusChange(item, 'MI')}
+                                  className={`px-1.5 py-1 rounded text-[10px] font-bold transition cursor-pointer text-center ${
+                                    item.status === 'MI'
+                                      ? 'bg-amber-600 text-white shadow-xs ring-1 ring-amber-400'
+                                      : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300'
+                                  }`}
+                                  title="Minor NC (ไม่สอดคล้องขั้นเล็กน้อย)"
+                                >
+                                  ⚠ MI
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1">
+                                <button
+                                  onClick={() => handleStatusChange(item, 'OBS')}
+                                  className={`px-1.5 py-1 rounded text-[10px] font-bold transition cursor-pointer text-center ${
+                                    item.status === 'OBS'
+                                      ? 'bg-purple-600 text-white shadow-xs ring-1 ring-purple-400'
+                                      : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-300'
+                                  }`}
+                                  title="OBS (Observation - ข้อสังเกต)"
+                                >
+                                  👁 OBS
+                                </button>
+                                <button
+                                  onClick={() => handleStatusChange(item, 'OFI')}
+                                  className={`px-1.5 py-1 rounded text-[10px] font-bold transition cursor-pointer text-center ${
+                                    item.status === 'OFI'
+                                      ? 'bg-cyan-600 text-white shadow-xs ring-1 ring-cyan-400'
+                                      : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100 border border-cyan-300'
+                                  }`}
+                                  title="OFI (Opportunity For Improvement)"
+                                >
+                                  💡 OFI
+                                </button>
+                              </div>
+
+                              {/* Evidence recorded note */}
+                              <input
+                                type="text"
+                                value={item.evidenceRecorded || ''}
+                                onChange={(e) => handleEvidenceChange(item, e.target.value)}
+                                placeholder="บันทึกสิ่งที่ตรวจพบ..."
+                                className="w-full text-[10px] p-1.5 border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <span
+                                className={`inline-block px-2.5 py-1 rounded text-[11px] font-bold ${
+                                  item.status === 'C'
+                                    ? 'bg-emerald-600 text-white'
+                                    : item.status === 'MA'
+                                    ? 'bg-rose-600 text-white'
+                                    : item.status === 'MI'
+                                    ? 'bg-amber-500 text-white'
+                                    : item.status === 'OBS'
+                                    ? 'bg-purple-600 text-white'
+                                    : item.status === 'OFI'
+                                    ? 'bg-cyan-600 text-white'
+                                    : 'bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {item.status === 'C' && '✓ สอดคล้อง'}
+                                {item.status === 'MA' && '✕ Major NC'}
+                                {item.status === 'MI' && '⚠ Minor NC'}
+                                {item.status === 'OBS' && '👁 ข้อสังเกต'}
+                                {item.status === 'OFI' && '💡 ปรับปรุง'}
+                                {item.status === 'PENDING' && 'รอตรวจ'}
+                              </span>
+                              {item.evidenceRecorded && (
+                                <p className="text-[10px] text-slate-600 italic">
+                                  "{item.evidenceRecorded}"
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 8. การจัดการ & AI (Actions) */}
+                        <td className="py-3.5 px-3 align-top text-center">
+                          <div className="flex flex-col gap-1.5 items-stretch">
+                            <button
+                              onClick={() => handleAiEvaluate(item)}
+                              disabled={isEvaluating}
+                              className="px-2 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-bold rounded-lg shadow-xs transition active:scale-95 cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+                              title="ให้น้องออดิตช่วยวิเคราะห์และตัดสินผลตรวจ"
+                            >
+                              <Sparkles className="w-3 h-3 text-amber-300" />
+                              <span>{isEvaluating ? 'กำลังตรวจ...' : 'น้องออดิต AI'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => onOpenExplainModal(item)}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold rounded-lg border border-slate-300 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                              title="อธิบายข้อสงสัยแทนฉัน"
+                            >
+                              <MessageCircleQuestion className="w-3 h-3 text-blue-600" />
+                              <span>อธิบายแทนฉัน</span>
+                            </button>
+
+                            {(item.capRequired || item.capData || item.status === 'MA' || item.status === 'MI') && (
+                              <button
+                                onClick={() => onOpenCarModal(item)}
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 text-[10px] font-bold rounded-lg border border-rose-300 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+                                title="ดูหรือแก้ไขใบ CAR / CAP"
+                              >
+                                <ShieldAlert className="w-3 h-3 text-rose-600" />
+                                <span>ดู/แก้ CAR</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expandable Sub-Row (บทวิเคราะห์ Lead Auditor, ISO & Legal Clauses) */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/95 border-b-2 border-indigo-200">
+                          <td colSpan={8} className="p-4 sm:p-5">
+                            <div className="space-y-3.5 text-xs">
+                              <div className="flex items-center justify-between">
+                                <div className="font-bold text-slate-900 flex items-center gap-2">
+                                  <FileCheck className="w-4 h-4 text-blue-600" />
+                                  <span>รายละเอียดเชิงลึกและบทวิเคราะห์ Lead Auditor (ข้อ #{item.id})</span>
+                                </div>
+                                <button
+                                  onClick={() => setExpandedItemId(null)}
+                                  className="text-[11px] text-slate-500 hover:text-slate-800 cursor-pointer font-semibold"
+                                >
+                                  ย่อปิด ✕
+                                </button>
+                              </div>
+
+                              {/* Finding Detail */}
+                              {item.auditorFindingDetail ? (
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-800 leading-relaxed whitespace-pre-line shadow-xs">
+                                  <strong className="text-blue-900 block mb-1">
+                                    บทวิเคราะห์ข้อบกพร่องเชิงระบบ (Lead Auditor Analysis):
+                                  </strong>
+                                  {item.auditorFindingDetail}
+                                </div>
+                              ) : (
+                                <p className="text-slate-400 italic">
+                                  ยังไม่มีบทวิเคราะห์เพิ่มเติม คลิกปุ่ม "น้องออดิต AI" เพื่อให้น้องช่วยประเมินอัตโนมัติ
+                                </p>
+                              )}
+
+                              {/* Full Evidence Recorded Textarea */}
+                              <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1 shadow-xs">
+                                <label className="font-bold text-slate-800 text-xs block">
+                                  บันทึกหลักฐานที่พบหน้างานจริง (Evidence Recorded by Auditor):
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  value={item.evidenceRecorded || ''}
+                                  onChange={(e) => handleEvidenceChange(item, e.target.value)}
+                                  placeholder="ระบุสิ่งที่พบหน้างาน เช่น ตรวจสอบเอกสารฉบับอนุมัติแล้ว, สุ่มตรวจ พขร. 5 นายมีผลเป่าแอลกอฮอล์เป็นศูนย์..."
+                                  className="w-full text-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                                />
+                              </div>
+
+                              {/* ISO Clauses & Legal Standards */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                                  <span className="font-bold text-blue-900 block mb-1">
+                                    ข้อกำหนด ISO ที่เกี่ยวข้อง:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {item.isoClauses && item.isoClauses.length > 0 ? (
+                                      item.isoClauses.map((c, i) => (
+                                        <span
+                                          key={i}
+                                          className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200 text-[11px]"
+                                        >
+                                          {c}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-slate-400 text-[11px]">
+                                        {item.requirement || 'ISO 9001 / ISO 14001 / ISO 45001'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                                  <span className="font-bold text-slate-900 block mb-1">
+                                    กฎหมายความปลอดภัย/ขนส่งที่เกี่ยวข้อง:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {item.lawReferences && item.lawReferences.length > 0 ? (
+                                      item.lawReferences.map((l, i) => (
+                                        <span
+                                          key={i}
+                                          className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200 text-[11px]"
+                                        >
+                                          {l}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-slate-400 text-[11px]">
+                                        กฎหมายความปลอดภัย อาชีวอนามัย และสิ่งแวดล้อมไทย
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
+          /* ========================================================================= */
+          /* 📇 AUDIT CARDS VIEW (มุมมองการ์ดแบบละเอียด)                               */
+          /* ========================================================================= */
           filteredItems.map((item) => {
             const isExpanded = expandedItemId === item.id;
             const isEvaluating = evaluatingItemId === item.id;

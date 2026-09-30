@@ -81,46 +81,35 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
 
   // 1. Template Download (Excel & CSV)
   const handleDownloadTemplate = (format: 'xlsx' | 'csv') => {
-    const activeDeptName = targetDept !== 'ALL' ? targetDept : 'Transport';
+    const activeDeptName = targetDept !== 'ALL' ? targetDept : 'HR & GA';
     const templateRows = [
       {
-        'ลำดับ (No)': 1,
+        'No.': 1,
+        'ข้อกำหนด (Requirement)': 'ISO 9001/45001 cl. 5.3\nISO 9001 cl. 6.3, 7.5.2, 7.5.3\nISO 45001 cl. 8.1.3',
+        'คำถาม (Audit Questions)': 'สุ่มแผนผังองค์กรของฝ่าย QSHE ผังองค์กร JD อำนาจอนุมัติ และเอกสารควบคุมฉบับล่าสุด\n► หลักฐานที่ขอดู: Org chart QSHE; JD',
+        'Mannual/Procedure/WI/SD/Form': '• P-HR-004\n• WI-HR-003\n• WI-HR-004\n• Org chart QSHE',
         'ฝ่าย/แผนก (Department)': activeDeptName,
-        'รหัสหมวด (Category Code)': 'ก',
-        'ชื่อหมวดหมู่ (Category Title)': 'บริบทองค์กรและความปลอดภัย',
-        'ข้อกำหนด (Requirement)': 'การกำหนดขอบเขตและบริบทองค์กร (Context & Scope)',
-        'ข้อคำถามในการตรวจ (Question)': 'มีการทบทวนปัจจัยภายใน-ภายนอก ทะเบียนความเสี่ยง และผลกระทบการเปลี่ยนแปลงสภาพภูมิอากาศ (Climate Change) หรือไม่?',
-        'เอกสารอ้างอิง (Reference Docs)': 'P-PU-001, ทะเบียนความเสี่ยง, F-SE-001',
-        'หลักฐานที่ต้องตรวจสอบ (Required Evidence)': 'ตาราง SWOT, รายงานทบทวนผลกระทบ Climate Change (Heat stroke / เชื้อเพลิง)',
-        'ระดับความเสี่ยง (Priority)': 'HIGH',
-        'ข้อกำหนด ISO (ISO Clauses)': 'ISO 9001:2015 ข้อ 4.1-4.3, ISO 14001/45001 ข้อ 4.1',
-        'กฎหมายที่เกี่ยวข้อง (Laws)': 'พ.ร.บ. ความปลอดภัยฯ 2554',
       },
       {
-        'ลำดับ (No)': 2,
+        'No.': 2,
+        'ข้อกำหนด (Requirement)': 'ISO 9001/45001 cl. 7.2, 7.3\nISO 9001 cl. 7.1.2, 8.1',
+        'คำถาม (Audit Questions)': 'ตรวจคุณสมบัติ รปภ. ตาม พ.ร.บ.รปภ. 2558 แฟ้มประวัติ ตารางเวรเทียบอัตรากำลังจริง การจัดคนแทน และบันทึกการฝึกอบรม\n► หลักฐานที่ขอดู: แฟ้มประวัติ รปภ.; ใบอนุญาต รปภ.; ผลตรวจสารเสพติด/อาชญากรรม; ตารางเวร/ใบสแกนนิ้ว; ทะเบียนอบรม',
+        'Mannual/Procedure/WI/SD/Form': '• P-HR-004\n• WI-HR-003\n• WI-HR-004',
         'ฝ่าย/แผนก (Department)': activeDeptName,
-        'รหัสหมวด (Category Code)': 'ช',
-        'ชื่อหมวดหมู่ (Category Title)': 'การควบคุมการปฏิบัติการและความปลอดภัยลานตู้',
-        'ข้อกำหนด (Requirement)': 'การควบคุมสารเคมีอันตรายและฉลาก GHS',
-        'ข้อคำถามในการตรวจ (Question)': 'ห้ามนำขวดน้ำดื่มมาบรรจุสารเคมีเด็ดขาด และมีการติดฉลาก GHS พร้อม SDS ภาษาไทย ณ จุดใช้งานหรือไม่?',
-        'เอกสารอ้างอิง (Reference Docs)': 'P-PU-002, กฎหมายสารเคมี',
-        'หลักฐานที่ต้องตรวจสอบ (Required Evidence)': 'สำรวจหน้างานจุดซ่อมตู้คอนเทนเนอร์, ป้ายเตือน GHS, แฟ้ม SDS ภาษาไทย',
-        'ระดับความเสี่ยง (Priority)': 'HIGH',
-        'ข้อกำหนด ISO (ISO Clauses)': 'ISO 45001:2018 ข้อ 8.1.2, ISO 14001:2015 ข้อ 8.1',
-        'กฎหมายที่เกี่ยวข้อง (Laws)': 'กฎกระทรวงสารเคมีอันตราย พ.ศ. 2556 ข้อ 11, 15',
       },
       {
-        'ลำดับ (No)': 3,
+        'No.': 3,
+        'ข้อกำหนด (Requirement)': 'ISO 9001 cl. 7.1.3, 8.1, 9.1.1\nISO 45001 cl. 8.2',
+        'คำถาม (Audit Questions)': 'ตรวจการเริ่มกะ การมอบหมายจุด รายงานเหตุการณ์ประจำวัน ผลการสแกน QR ตรวจการณ์ 20 จุด และอุปกรณ์ประจำจุด\n► หลักฐานที่ขอดู: บันทึกประชุมแถว; Daily report; รายงานระบบสแกน QR; ทะเบียนและบันทึกตรวจเช็กวิทยุสื่อสาร/ถังดับเพลิง',
+        'Mannual/Procedure/WI/SD/Form': '• P-HR-004\n• WI-HR-003',
         'ฝ่าย/แผนก (Department)': activeDeptName,
-        'รหัสหมวด (Category Code)': 'ช',
-        'ชื่อหมวดหมู่ (Category Title)': 'การควบคุมการปฏิบัติการและความปลอดภัยลานตู้',
-        'ข้อกำหนด (Requirement)': 'การควบคุมสุขภาพและความพร้อมของพนักงานขับรถ',
-        'ข้อคำถามในการตรวจ (Question)': 'มีบันทึกประวัติเป่าแอลกอฮอล์เป็นศูนย์ และการตรวจวัดความดันโลหิตก่อนออกปฏิบัติงานประจำวันหรือไม่? (เกิน 140/90 พัก 15 นาที)',
-        'เอกสารอ้างอิง (Reference Docs)': 'WI-TR-004, P-PU-001',
-        'หลักฐานที่ต้องตรวจสอบ (Required Evidence)': 'สมุดบันทึกเป่าแอลกอฮอล์, เครื่องวัดความดัน, ใบบันทึกผลประจำวัน',
-        'ระดับความเสี่ยง (Priority)': 'HIGH',
-        'ข้อกำหนด ISO (ISO Clauses)': 'ISO 45001:2018 ข้อ 8.1.1, ข้อ 8.1.4',
-        'กฎหมายที่เกี่ยวข้อง (Laws)': 'พ.ร.บ. การขนส่งทางบก พ.ศ. 2522, กฎกระทรวงความปลอดภัย พ.ร.บ. 2554',
+      },
+      {
+        'No.': 4,
+        'ข้อกำหนด (Requirement)': 'ISO 9001 cl. 7.1.3, 7.5.3, 8.1\nISO 14001/45001 cl. 8.1',
+        'คำถาม (Audit Questions)': 'สังเกตการณ์ป้อม P1 การตรวจสิ่งของต้องห้าม ใบขอเข้า-ออก (F-HR-027) บัตร Visitor เอกสารนำของออก (F-HR-028) และการคุมรถส่งของ/เคมี\n► หลักฐานที่ขอดู: สังเกตหน้างานป้อม P1; บันทึกตรวจค้น; F-HR-027; ทะเบียนบัตร Visitor; F-HR-028; บันทึกเวลาเข้า-ออกรถ',
+        'Mannual/Procedure/WI/SD/Form': '• P-HR-004\n• WI-HR-003\n• WI-HR-004',
+        'ฝ่าย/แผนก (Department)': activeDeptName,
       },
     ];
 
@@ -162,12 +151,13 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
         }
 
         const items: AuditItem[] = jsonRows.map((row, index) => {
-          // Flexible column mapping
+          // Flexible column mapping matching user format
           const id =
             parseInt(
-              row['ลำดับ (No)'] ||
-                row['ลำดับ'] ||
+              row['No.'] ||
                 row['No'] ||
+                row['ลำดับ (No)'] ||
+                row['ลำดับ'] ||
                 row['ID'] ||
                 row['ข้อที่'] ||
                 String(index + 1),
@@ -187,21 +177,23 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
               row['หมวด'] ||
               row['หมวดหมู่'] ||
               row['Category'] ||
-              'หมวดทั่วไป'
+              'ทั่วไป'
           ).trim();
 
           const requirement = String(
             row['ข้อกำหนด (Requirement)'] ||
-              row['ข้อกำหนด'] ||
               row['Requirement'] ||
+              row['ข้อกำหนด'] ||
               row['หัวข้อ'] ||
               ''
           ).trim();
 
           const question = String(
-            row['ข้อคำถามในการตรวจ (Question)'] ||
-              row['ข้อคำถาม'] ||
+            row['คำถาม (Audit Questions)'] ||
+              row['Audit Questions'] ||
               row['คำถาม'] ||
+              row['ข้อคำถามในการตรวจ (Question)'] ||
+              row['ข้อคำถาม'] ||
               row['คำถามตรวจ'] ||
               row['Question'] ||
               row['รายการตรวจ'] ||
@@ -210,18 +202,33 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
           ).trim();
 
           const referenceDocs = String(
-            row['เอกสารอ้างอิง (Reference Docs)'] ||
+            row['Mannual/Procedure/WI/SD/Form'] ||
+              row['Manual/Procedure/WI/SD/Form'] ||
+              row['Manual/Procedure/WI'] ||
+              row['WI/SD/Form'] ||
+              row['Procedure/WI/Form'] ||
+              row['เอกสารอ้างอิง (Reference Docs)'] ||
               row['เอกสารอ้างอิง'] ||
               row['Reference'] ||
               row['Ref'] ||
-              'P-PU-001'
+              ''
           ).trim();
+
+          // Extract required evidence if question contains '► หลักฐานที่ขอดู:'
+          let extractedEvidence = '';
+          if (question.includes('หลักฐานที่ขอดู:')) {
+            const parts = question.split(/หลักฐานที่ขอดู:/i);
+            if (parts[1]) {
+              extractedEvidence = parts[1].trim();
+            }
+          }
 
           const requiredEvidence = String(
             row['หลักฐานที่ต้องตรวจสอบ (Required Evidence)'] ||
               row['หลักฐานที่ต้องดู'] ||
               row['หลักฐาน'] ||
               row['Evidence'] ||
+              extractedEvidence ||
               'บันทึกและหลักฐานการทำงาน'
           ).trim();
 
@@ -241,6 +248,7 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
               row['ISO Clauses'] ||
               row['ISO'] ||
               row['ข้อกำหนด ISO'] ||
+              requirement ||
               ''
           );
           const isoClauses = rawIso
@@ -564,7 +572,7 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
                     <span>ดาวน์โหลดเทมเพลตฟอร์มเปล่าเพื่อนำไปกรอกข้อมูล:</span>
                   </h4>
                   <p className="text-[11px] text-emerald-700">
-                    หัวคอลัมน์มาตรฐาน: ลำดับ, รหัสหมวด, ชื่อหมวด, ข้อกำหนด, คำถามตรวจ, เอกสารอ้างอิง, หลักฐาน, ความสำคัญ, ข้อกำหนด ISO, กฎหมาย
+                    หัวคอลัมน์มาตรฐาน: No., ข้อกำหนด (Requirement), คำถาม (Audit Questions), Mannual/Procedure/WI/SD/Form, ฝ่าย/แผนก (Department)
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -730,41 +738,35 @@ export const UploadChecklistModal: React.FC<UploadChecklistModalProps> = ({
               </div>
 
               {/* Scrollable table preview */}
-              <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-xs">
-                <table className="w-full text-left text-[11px]">
-                  <thead className="bg-slate-100 text-slate-700 uppercase font-semibold sticky top-0 border-b border-slate-200">
+              <div className="max-h-56 overflow-y-auto border border-slate-300 rounded-xl bg-white shadow-xs">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-200 text-slate-800 uppercase font-bold sticky top-0 border-b border-slate-300">
                     <tr>
-                      <th className="py-2 px-2.5 w-12 text-center">ข้อที่</th>
-                      <th className="py-2 px-2.5 w-24">หมวด</th>
-                      <th className="py-2 px-3">ข้อคำถาม / สิ่งที่ต้องตรวจ</th>
-                      <th className="py-2 px-3 w-32">หลักฐานที่ต้องดู</th>
-                      <th className="py-2 px-2.5 w-20 text-center">ความสำคัญ</th>
+                      <th className="py-2.5 px-3 w-14 text-center border-r border-slate-300">No.</th>
+                      <th className="py-2.5 px-3 w-48 border-r border-slate-300">ข้อกำหนด (Requirement)</th>
+                      <th className="py-2.5 px-3 border-r border-slate-300">คำถาม (Audit Questions)</th>
+                      <th className="py-2.5 px-3 w-52 border-r border-slate-300">Mannual/Procedure/WI/SD/Form</th>
+                      <th className="py-2.5 px-3 w-28 text-center">ฝ่าย/แผนก</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-200">
                     {previewItems.slice(0, 15).map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
-                        <td className="py-2 px-2.5 font-bold text-slate-700 text-center">
+                        <td className="py-2.5 px-3 font-bold text-slate-800 text-center border-r border-slate-200 align-top">
                           {item.id}
                         </td>
-                        <td className="py-2 px-2.5 text-blue-800 font-medium">
-                          {item.categoryCode}: {item.categoryTitle}
+                        <td className="py-2.5 px-3 font-semibold text-slate-800 border-r border-slate-200 align-top whitespace-pre-line">
+                          {item.requirement || item.isoClauses?.join('\n') || '-'}
                         </td>
-                        <td className="py-2 px-3 text-slate-800">
+                        <td className="py-2.5 px-3 text-slate-900 border-r border-slate-200 align-top whitespace-pre-line">
                           {item.question}
                         </td>
-                        <td className="py-2 px-3 text-slate-500">
-                          {item.requiredEvidence}
+                        <td className="py-2.5 px-3 text-slate-700 border-r border-slate-200 align-top whitespace-pre-line font-mono text-[11px]">
+                          {item.referenceDocs || '-'}
                         </td>
-                        <td className="py-2 px-2.5 text-center">
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                              item.priority === 'HIGH'
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {item.priority}
+                        <td className="py-2.5 px-3 text-center align-top">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                            {item.department || targetDept || 'ALL'}
                           </span>
                         </td>
                       </tr>

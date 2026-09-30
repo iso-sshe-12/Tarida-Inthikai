@@ -32,6 +32,7 @@ interface AuditScheduleTabProps {
   onJumpToChecklist?: () => void;
   isSheetsConnected?: boolean;
   onSyncAllToSheets?: () => void;
+  onOpenTeamModal?: () => void;
 }
 
 export const AuditScheduleTab: React.FC<AuditScheduleTabProps> = ({
@@ -43,6 +44,7 @@ export const AuditScheduleTab: React.FC<AuditScheduleTabProps> = ({
   onJumpToChecklist,
   isSheetsConnected = false,
   onSyncAllToSheets,
+  onOpenTeamModal,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | AuditPlanStatus>('ALL');
@@ -242,6 +244,17 @@ export const AuditScheduleTab: React.FC<AuditScheduleTabProps> = ({
               <Plus className="w-4 h-4 text-white" />
               <span>+ เพิ่มข้อมูลตารางออดิต</span>
             </button>
+
+            {onOpenTeamModal && (
+              <button
+                onClick={onOpenTeamModal}
+                className="px-3.5 py-2.5 bg-indigo-700/80 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer flex items-center gap-1.5 shadow-xs border border-indigo-500/40"
+                title="จัดการทีมผู้ตรวจ (Auditor) และผู้รับการตรวจ (Auditee)"
+              >
+                <Users className="w-4 h-4 text-indigo-200" />
+                <span>จัดการทีม Auditor &amp; Auditee</span>
+              </button>
+            )}
 
             {onSyncAllToSheets && (
               <button
