@@ -38,6 +38,8 @@ import {
   syncCarToSheets,
   syncScheduleToSheets,
   syncAllSchedulesToSheets,
+  syncChecklistToSheets,
+  syncUsersToSheets,
   fetchAuditSummaryFromSheets,
   calculateSummaryMetrics,
 } from './utils/googleSheetsSync';
@@ -55,6 +57,9 @@ import {
   ShieldAlert,
   Users,
   Bell,
+  LogIn,
+  Lock,
+  LogOut,
 } from 'lucide-react';
 
 const STORAGE_KEY_ITEMS = 'krc_audit_items_cache_v3';
@@ -170,7 +175,9 @@ export default function App() {
   }, [auditSchedule]);
 
   const handleAddSchedule = (entry: AuditPlanEntry) => {
-    setAuditSchedule((prev) => [entry, ...prev]);
+    const next = [entry, ...auditSchedule];
+    setAuditSchedule(next);
+    saveScheduleToDatabase(next);
     setToastMessage(`✓ เพิ่มแผนตรวจ "${entry.department}" ลงตารางออดิตเรียบร้อยแล้ว`);
     setTimeout(() => setToastMessage(null), 3000);
 
@@ -186,7 +193,9 @@ export default function App() {
   };
 
   const handleUpdateSchedule = (updated: AuditPlanEntry) => {
-    setAuditSchedule((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    const next = auditSchedule.map((s) => (s.id === updated.id ? updated : s));
+    setAuditSchedule(next);
+    saveScheduleToDatabase(next);
     setToastMessage(`✓ อัปเดตข้อมูลตารางออดิต ${updated.id} สำเร็จ`);
     setTimeout(() => setToastMessage(null), 3000);
 
@@ -219,13 +228,16 @@ export default function App() {
   };
 
   const handleDeleteSchedule = (id: string) => {
-    setAuditSchedule((prev) => prev.filter((s) => s.id !== id));
+    const next = auditSchedule.filter((s) => s.id !== id);
+    setAuditSchedule(next);
+    saveScheduleToDatabase(next);
     setToastMessage(`✓ ลบรายการ ${id} ออกจากตารางออดิตแล้ว`);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleResetSchedule = () => {
     setAuditSchedule(DEFAULT_AUDIT_SCHEDULE);
+    saveScheduleToDatabase(DEFAULT_AUDIT_SCHEDULE);
     setToastMessage('✓ รีเซ็ตตารางออดิตกลับเป็นแผนมาตรฐาน K.R.C. สำเร็จ');
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -241,6 +253,16 @@ export default function App() {
     return DEFAULT_TEAM_MEMBERS;
   });
 
+  // Login Authentication State
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    try {
+      const savedEmail = localStorage.getItem(STORAGE_KEY_LOGGED_IN_EMAIL);
+      return !!savedEmail && savedEmail.trim() !== '';
+    } catch {
+      return false;
+    }
+  });
+
   const [currentUser, setCurrentUser] = useState<TeamMember>(() => {
     try {
       const savedEmail = localStorage.getItem(STORAGE_KEY_LOGGED_IN_EMAIL);
@@ -254,14 +276,109 @@ export default function App() {
     return teamMembers[0] || DEFAULT_TEAM_MEMBERS[0];
   });
 
-  // Persist email & currentUser changes
+  // Persist email & currentUser changes ONLY when logged in
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, currentUser.email);
+      if (isLoggedIn && currentUser?.email) {
+        localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, currentUser.email);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_LOGGED_IN_EMAIL);
+      }
     } catch (e) {
       console.warn(e);
     }
-  }, [currentUser]);
+  }, [isLoggedIn, currentUser]);
+
+  // Central Database Persistence Helpers
+  const saveChecklistToDatabase = async (
+    items: AuditItem[],
+    title?: string,
+    isCustom?: boolean
+  ) => {
+    try {
+      await fetch('/api/database/checklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items,
+          title: title ?? checklistTitle,
+          isCustom: isCustom ?? isCustomChecklist,
+        }),
+      });
+
+      if (sheetsConfig.isConnected && sheetsConfig.webAppUrl) {
+        syncChecklistToSheets(sheetsConfig.webAppUrl, items).catch((e) =>
+          console.warn('Sync checklist to sheets error:', e)
+        );
+      }
+    } catch (e) {
+      console.warn('Failed to save checklist to database:', e);
+    }
+  };
+
+  const saveTeamToDatabase = async (members: TeamMember[]) => {
+    try {
+      await fetch('/api/database/team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamMembers: members }),
+      });
+
+      if (sheetsConfig.isConnected && sheetsConfig.webAppUrl) {
+        syncUsersToSheets(sheetsConfig.webAppUrl, members).catch((e) =>
+          console.warn('Sync users to sheets error:', e)
+        );
+      }
+    } catch (e) {
+      console.warn('Failed to save team to database:', e);
+    }
+  };
+
+  const saveScheduleToDatabase = async (schedule: AuditPlanEntry[]) => {
+    try {
+      await fetch('/api/database/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedule }),
+      });
+
+      if (sheetsConfig.isConnected && sheetsConfig.webAppUrl) {
+        syncAllSchedulesToSheets(sheetsConfig.webAppUrl, schedule).catch((e) =>
+          console.warn('Sync schedule to sheets error:', e)
+        );
+      }
+    } catch (e) {
+      console.warn('Failed to save schedule to database:', e);
+    }
+  };
+
+  // Initial load from central database store on mount
+  useEffect(() => {
+    const loadCentralDatabase = async () => {
+      try {
+        const res = await fetch('/api/database/all');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            if (Array.isArray(json.data.checklistItems) && json.data.checklistItems.length > 0) {
+              setChecklistItems(json.data.checklistItems);
+              if (json.data.checklistTitle) setChecklistTitle(json.data.checklistTitle);
+              if (json.data.isCustomChecklist !== undefined) setIsCustomChecklist(json.data.isCustomChecklist);
+            }
+            if (Array.isArray(json.data.teamMembers) && json.data.teamMembers.length > 0) {
+              setTeamMembers(json.data.teamMembers);
+            }
+            if (Array.isArray(json.data.auditSchedule) && json.data.auditSchedule.length > 0) {
+              setAuditSchedule(json.data.auditSchedule);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load from central database:', e);
+      }
+    };
+    loadCentralDatabase();
+  }, []);
 
   // Persist selected perspective
   useEffect(() => {
@@ -393,46 +510,46 @@ export default function App() {
     auditeeName: string
   ) => {
     // 1. Update all matching checklist items
-    setChecklistItems((prev) =>
-      prev.map((item) => {
-        const itemDept = item.department || assignDepartmentToItem(item);
-        if (
-          deptOrCategory === 'ALL' ||
-          itemDept === deptOrCategory ||
-          item.categoryCode === deptOrCategory
-        ) {
-          return {
-            ...item,
-            assignedAuditorId: auditorId || item.assignedAuditorId,
-            assignedAuditorName: auditorName || item.assignedAuditorName,
-            assignedAuditeeId: auditeeId || item.assignedAuditeeId,
-            assignedAuditeeName: auditeeName || item.assignedAuditeeName,
-          };
-        }
-        return item;
-      })
-    );
+    const updatedChecklist = checklistItems.map((item) => {
+      const itemDept = item.department || assignDepartmentToItem(item);
+      if (
+        deptOrCategory === 'ALL' ||
+        itemDept === deptOrCategory ||
+        item.categoryCode === deptOrCategory
+      ) {
+        return {
+          ...item,
+          assignedAuditorId: auditorId || item.assignedAuditorId,
+          assignedAuditorName: auditorName || item.assignedAuditorName,
+          assignedAuditeeId: auditeeId || item.assignedAuditeeId,
+          assignedAuditeeName: auditeeName || item.assignedAuditeeName,
+        };
+      }
+      return item;
+    });
+    setChecklistItems(updatedChecklist);
+    saveChecklistToDatabase(updatedChecklist);
 
     // 2. Synchronize to Audit Schedule Plan
-    setAuditSchedule((prev) =>
-      prev.map((s) => {
-        if (
-          deptOrCategory === 'ALL' ||
-          s.department.includes(deptOrCategory) ||
-          deptOrCategory.includes(s.department)
-        ) {
-          return {
-            ...s,
-            leadAuditor: auditorName || s.leadAuditor,
-            auditeeName: auditeeName || s.auditeeName,
-          };
-        }
-        return s;
-      })
-    );
+    const updatedSchedule = auditSchedule.map((s) => {
+      if (
+        deptOrCategory === 'ALL' ||
+        s.department.includes(deptOrCategory) ||
+        deptOrCategory.includes(s.department)
+      ) {
+        return {
+          ...s,
+          leadAuditor: auditorName || s.leadAuditor,
+          auditeeName: auditeeName || s.auditeeName,
+        };
+      }
+      return s;
+    });
+    setAuditSchedule(updatedSchedule);
+    saveScheduleToDatabase(updatedSchedule);
 
     const targetLabel = deptOrCategory === 'ALL' ? 'ทุกฝ่าย' : `ฝ่าย "${deptOrCategory}"`;
-    setToastMessage(`✓ มอบหมายผู้ตรวจและ Auditee สำหรับ ${targetLabel} เรียบร้อยแล้ว`);
+    setToastMessage(`✓ มอบหมายผู้ตรวจและ Auditee สำหรับ ${targetLabel} เรียบร้อยแล้ว (อัปเดตลงฐานข้อมูลแล้ว)`);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -445,8 +562,17 @@ export default function App() {
     }
     setTeamMembers(DEFAULT_TEAM_MEMBERS);
     setCurrentUser(DEFAULT_TEAM_MEMBERS[0]);
-    setToastMessage('✓ รีเซ็ตรายชื่อทีม Auditor & Auditee กลับเป็นค่าเริ่มต้นมาตรฐาน K.R.C. สำเร็จ');
+    saveTeamToDatabase(DEFAULT_TEAM_MEMBERS);
+    setToastMessage('✓ รีเซ็ตรายชื่อทีม Auditor & Auditee กลับเป็นค่าเริ่มต้นมาตรฐาน K.R.C. สำเร็จ (บันทึกลงฐานข้อมูลแล้ว)');
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Update Team Members Handler
+  const handleUpdateTeamMembers = (updated: TeamMember[]) => {
+    setTeamMembers(updated);
+    saveTeamToDatabase(updated);
+    setToastMessage('✓ บันทึกข้อมูลทีม Auditor & Auditee ลงฐานข้อมูลระบบเรียบร้อย');
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   // Switch persona handler
@@ -472,6 +598,7 @@ export default function App() {
     const found = teamMembers.find((m) => m.email.trim().toLowerCase() === clean);
     if (found) {
       setCurrentUser(found);
+      setIsLoggedIn(true);
       try {
         localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, found.email);
       } catch (e) {
@@ -514,17 +641,17 @@ export default function App() {
 
   // Quick Register and Login Handler
   const handleRegisterAndLogin = (newMember: TeamMember, perspective?: 'AUDITOR' | 'AUDITEE') => {
-    setTeamMembers((prev) => {
-      const updated = [newMember, ...prev.filter((m) => m.email.toLowerCase() !== newMember.email.toLowerCase())];
-      try {
-        localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(updated));
-      } catch (e) {
-        console.warn(e);
-      }
-      return updated;
-    });
+    const updated = [newMember, ...teamMembers.filter((m) => m.email.toLowerCase() !== newMember.email.toLowerCase())];
+    setTeamMembers(updated);
+    saveTeamToDatabase(updated);
+    try {
+      localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(updated));
+    } catch (e) {
+      console.warn(e);
+    }
 
     setCurrentUser(newMember);
+    setIsLoggedIn(true);
     try {
       localStorage.setItem(STORAGE_KEY_LOGGED_IN_EMAIL, newMember.email);
     } catch (e) {
@@ -545,16 +672,17 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Logout Handler
+  // Logout Handler (Resets session and shows only first page)
   const handleLogout = () => {
+    setIsLoggedIn(false);
     try {
       localStorage.removeItem(STORAGE_KEY_LOGGED_IN_EMAIL);
     } catch (e) {
       console.warn(e);
     }
-    setToastMessage('ออกจากระบบเรียบร้อยแล้ว');
-    setIsLoginModalOpen(true);
-    setTimeout(() => setToastMessage(null), 2500);
+    setActiveTab('SCHEDULE'); // Return to first page
+    setToastMessage('✓ ออกจากระบบเรียบร้อยแล้ว — ขณะนี้แสดงเฉพาะหน้าแรก');
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Notification Handler (Google Chat & Email)
@@ -665,26 +793,28 @@ export default function App() {
     targetDept?: string
   ) => {
     if (mode === 'REPLACE_DEPT' && targetDept) {
-      setChecklistItems((prev) => {
-        const otherDeptItems = prev.filter(
-          (it) => (it.department || assignDepartmentToItem(it)) !== targetDept
-        );
-        const maxId = otherDeptItems.reduce((max, it) => Math.max(max, it.id), 0);
-        const remappedNewItems = newItems.map((it, idx) => ({
-          ...it,
-          id: maxId + idx + 1,
-          department: targetDept,
-        }));
-        return [...otherDeptItems, ...remappedNewItems];
-      });
-      setToastMessage(`✓ นำเข้า Checklist ฝ่าย "${targetDept}" สำเร็จ (${newItems.length} ข้อ)`);
-      setTimeout(() => setToastMessage(null), 3500);
+      const otherDeptItems = checklistItems.filter(
+        (it) => (it.department || assignDepartmentToItem(it)) !== targetDept
+      );
+      const maxId = otherDeptItems.reduce((max, it) => Math.max(max, it.id), 0);
+      const remappedNewItems = newItems.map((it, idx) => ({
+        ...it,
+        id: maxId + idx + 1,
+        department: targetDept,
+      }));
+      const combined = [...otherDeptItems, ...remappedNewItems];
+      setChecklistItems(combined);
       setIsCustomChecklist(true);
+      saveChecklistToDatabase(combined, checklistTitle, true);
+      setToastMessage(`✓ นำเข้า Checklist ฝ่าย "${targetDept}" สำเร็จ (${newItems.length} ข้อ) และบันทึกลงฐานข้อมูลแล้ว!`);
+      setTimeout(() => setToastMessage(null), 3500);
     } else if (mode === 'REPLACE') {
       setChecklistItems(newItems);
-      setChecklistTitle(title || 'Checklist ที่อัปโหลดใหม่');
+      const finalTitle = title || 'Checklist ที่อัปโหลดใหม่';
+      setChecklistTitle(finalTitle);
       setIsCustomChecklist(true);
-      setToastMessage(`✓ แทนที่ Checklist ทั้งหมดสำเร็จ (${newItems.length} ข้อ)`);
+      saveChecklistToDatabase(newItems, finalTitle, true);
+      setToastMessage(`✓ แทนที่ Checklist ทั้งหมดสำเร็จ (${newItems.length} ข้อ) และบันทึกลงฐานข้อมูลแล้ว!`);
       setTimeout(() => setToastMessage(null), 3500);
     } else {
       // Append mode: ensure continuous IDs
@@ -694,20 +824,25 @@ export default function App() {
         id: maxId + idx + 1,
         department: it.department || (targetDept && targetDept !== 'ALL' ? targetDept : assignDepartmentToItem(it)),
       }));
-      setChecklistItems([...checklistItems, ...remappedNewItems]);
-      setChecklistTitle(`${checklistTitle} (+ ${title})`);
+      const combined = [...checklistItems, ...remappedNewItems];
+      const finalTitle = `${checklistTitle} (+ ${title})`;
+      setChecklistItems(combined);
+      setChecklistTitle(finalTitle);
       setIsCustomChecklist(true);
-      setToastMessage(`✓ เพิ่มข้อคำถามต่อท้ายสำเร็จ (+${newItems.length} ข้อ)`);
+      saveChecklistToDatabase(combined, finalTitle, true);
+      setToastMessage(`✓ เพิ่มข้อคำถามต่อท้ายสำเร็จ (+${newItems.length} ข้อ) และบันทึกลงฐานข้อมูลแล้ว!`);
       setTimeout(() => setToastMessage(null), 3500);
     }
     setActiveTab('CHECKLIST');
   };
 
   const handleClearDepartmentItems = (deptId: string) => {
-    setChecklistItems((prev) =>
-      prev.filter((it) => (it.department || assignDepartmentToItem(it)) !== deptId)
+    const remaining = checklistItems.filter(
+      (it) => (it.department || assignDepartmentToItem(it)) !== deptId
     );
-    setToastMessage(`✓ ล้างข้อตรวจของฝ่าย "${deptId}" เรียบร้อยแล้ว พร้อมอัปโหลดชุดใหม่`);
+    setChecklistItems(remaining);
+    saveChecklistToDatabase(remaining, checklistTitle, isCustomChecklist);
+    setToastMessage(`✓ ล้างข้อตรวจของฝ่าย "${deptId}" เรียบร้อยแล้ว (อัปเดตลงฐานข้อมูลแล้ว)`);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -715,7 +850,8 @@ export default function App() {
     setChecklistItems([]);
     setChecklistTitle('Audit Checklist');
     setIsCustomChecklist(true);
-    setToastMessage('✓ ลบข้อตรวจทั้งหมดในระบบแล้ว พร้อมสำหรับการอัปโหลดชุดใหม่');
+    saveChecklistToDatabase([], 'Audit Checklist', true);
+    setToastMessage('✓ ลบข้อตรวจทั้งหมดในระบบแล้ว (อัปเดตลงฐานข้อมูลแล้ว)');
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -730,7 +866,8 @@ export default function App() {
     setChecklistItems([]);
     setChecklistTitle('Audit Checklist');
     setIsCustomChecklist(true);
-    setToastMessage('✓ ลบข้อมูลตัวอย่างทั้งหมดแล้ว พร้อมสำหรับการอัปโหลดใหม่');
+    saveChecklistToDatabase([], 'Audit Checklist', true);
+    setToastMessage('✓ ลบข้อมูลตัวอย่างทั้งหมดแล้ว พร้อมสำหรับการอัปโหลดใหม่ (บันทึกลงฐานข้อมูลแล้ว)');
     setTimeout(() => setToastMessage(null), 3000);
   };
 
@@ -738,6 +875,7 @@ export default function App() {
   const handleUpdateItem = (updatedItem: AuditItem) => {
     setChecklistItems((prev) => {
       const next = prev.map((item) => (item.id === updatedItem.id ? updatedItem : item));
+      saveChecklistToDatabase(next, checklistTitle, isCustomChecklist);
 
       // Auto-sync Finding to Google Sheets (Audit_Findings_Evidence & Audit_Summary)
       if (sheetsConfig.webAppUrl && sheetsConfig.autoSyncOnFinding && updatedItem.status !== 'PENDING') {
@@ -857,6 +995,8 @@ export default function App() {
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
         onOpenDatabaseModal={handleOpenDatabaseModal}
         onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
+        isLoggedIn={isLoggedIn}
         isSheetsConnected={sheetsConfig.isConnected}
         activeScenarioTitle={activeScenario?.title}
         totalFindingsCount={totalFindingsCount}
@@ -876,8 +1016,38 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Guest / Not Logged In Banner */}
+        {!isLoggedIn && (
+          <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-5 sm:p-6 mb-6 shadow-lg border border-blue-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-400 text-slate-950 uppercase tracking-wide">
+                  ระบบ Mock Internal Audit (K.R.C.)
+                </span>
+                <span className="text-xs text-blue-200">
+                  มุมมองผู้เยี่ยมชม (แสดงเฉพาะหน้าแรก)
+                </span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-white">
+                เตรียมความพร้อม Surveillance Audit ตุลาคม 2569 (ISO 9001 / 14001 / 45001)
+              </h2>
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                ขณะนี้คุณกำลังดู <strong>"หน้าแรก (ตารางออดิต &amp; แผนงาน)"</strong> กรุณาเข้าสู่ระบบด้วยอีเมลเพื่อเลือกเข้าใช้งานในมุมมอง <strong>Auditor (ผู้ตรวจประเมิน)</strong> หรือ <strong>Auditee (ผู้รับการตรวจ)</strong> บันทึกหลักฐาน และให้น้องออดิต AI ช่วยตรวจตัดสิน
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsLoginModalOpen(true)}
+              className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-600 hover:from-emerald-400 hover:to-blue-500 text-white text-xs font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer shrink-0 ring-2 ring-emerald-400/50"
+            >
+              <LogIn className="w-4 h-4 text-amber-300" />
+              <span>เข้าสู่ระบบด้วยอีเมล (Login)</span>
+            </button>
+          </div>
+        )}
+
         {/* Scenario Banner / Active Mode */}
-        {activeScenario && (
+        {isLoggedIn && activeScenario && (
           <div className="bg-white rounded-2xl p-4 mb-5 border border-slate-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700">
@@ -909,16 +1079,30 @@ export default function App() {
         <AuditStatsBar
           items={checklistItems}
           onFilterStatus={(st) => {
+            if (!isLoggedIn) {
+              setIsLoginModalOpen(true);
+              setToastMessage('🔒 กรุณาเข้าสู่ระบบก่อนเปิดระบบจำลองการ Audit');
+              setTimeout(() => setToastMessage(null), 3000);
+              return;
+            }
             setStatusFilter(st);
             setActiveTab('CHECKLIST');
           }}
           selectedStatusFilter={statusFilter}
-          onOpenReport={() => setActiveTab('SUMMARY')}
+          onOpenReport={() => {
+            if (!isLoggedIn) {
+              setIsLoginModalOpen(true);
+              setToastMessage('🔒 กรุณาเข้าสู่ระบบก่อนดูรายงานสรุปผล');
+              setTimeout(() => setToastMessage(null), 3000);
+              return;
+            }
+            setActiveTab('SUMMARY');
+          }}
         />
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs - If not logged in, show only First Tab (หน้าแรก) */}
         <div className="flex border-b border-slate-200 mb-6 gap-2 overflow-x-auto pb-1">
-          {/* Audit Schedule Tab (First Tab) */}
+          {/* Audit Schedule Tab (First Tab / หน้าแรก) */}
           <button
             onClick={() => setActiveTab('SCHEDULE')}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
@@ -928,14 +1112,22 @@ export default function App() {
             }`}
           >
             <Calendar className="w-4 h-4 text-indigo-600" />
-            <span>ตารางออดิต (Audit Schedule & Plan)</span>
+            <span>หน้าแรก: ตารางออดิต (Audit Schedule & Plan)</span>
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
               {auditSchedule.length}
             </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('CHECKLIST')}
+            onClick={() => {
+              if (!isLoggedIn) {
+                setIsLoginModalOpen(true);
+                setToastMessage('🔒 กรุณาเข้าสู่ระบบด้วยอีเมล เพื่อเข้าใช้งานระบบจำลองการ Audit');
+                setTimeout(() => setToastMessage(null), 3000);
+                return;
+              }
+              setActiveTab('CHECKLIST');
+            }}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'CHECKLIST'
                 ? 'border-blue-600 text-blue-700 bg-white/70 rounded-t-xl'
@@ -944,10 +1136,19 @@ export default function App() {
           >
             <ListChecks className="w-4 h-4 text-blue-600" />
             <span>จำลองการ Audit</span>
+            {!isLoggedIn && <Lock className="w-3 h-3 text-amber-500" />}
           </button>
 
           <button
-            onClick={() => setActiveTab('EVIDENCE')}
+            onClick={() => {
+              if (!isLoggedIn) {
+                setIsLoginModalOpen(true);
+                setToastMessage('🔒 กรุณาเข้าสู่ระบบด้วยอีเมล เพื่อตรวจสอบหลักฐานด่วน');
+                setTimeout(() => setToastMessage(null), 3000);
+                return;
+              }
+              setActiveTab('EVIDENCE');
+            }}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'EVIDENCE'
                 ? 'border-blue-600 text-blue-700 bg-white/70 rounded-t-xl'
@@ -956,10 +1157,19 @@ export default function App() {
           >
             <Camera className="w-4 h-4 text-indigo-600" />
             <span>ตรวจสอบหลักฐานด่วน (Evidence Inspector)</span>
+            {!isLoggedIn && <Lock className="w-3 h-3 text-amber-500" />}
           </button>
 
           <button
-            onClick={() => setActiveTab('EXPLAINER')}
+            onClick={() => {
+              if (!isLoggedIn) {
+                setIsLoginModalOpen(true);
+                setToastMessage('🔒 กรุณาเข้าสู่ระบบด้วยอีเมล เพื่อตอบข้อสงสัย Auditee');
+                setTimeout(() => setToastMessage(null), 3000);
+                return;
+              }
+              setActiveTab('EXPLAINER');
+            }}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'EXPLAINER'
                 ? 'border-blue-600 text-blue-700 bg-white/70 rounded-t-xl'
@@ -968,10 +1178,19 @@ export default function App() {
           >
             <MessageCircleQuestion className="w-4 h-4 text-amber-600" />
             <span>ตอบข้อสงสัย Auditee (Auditee Explainer)</span>
+            {!isLoggedIn && <Lock className="w-3 h-3 text-amber-500" />}
           </button>
 
           <button
-            onClick={() => setActiveTab('SUMMARY')}
+            onClick={() => {
+              if (!isLoggedIn) {
+                setIsLoginModalOpen(true);
+                setToastMessage('🔒 กรุณาเข้าสู่ระบบด้วยอีเมล เพื่อดูรายงานสรุปผลการตรวจ');
+                setTimeout(() => setToastMessage(null), 3000);
+                return;
+              }
+              setActiveTab('SUMMARY');
+            }}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'SUMMARY'
                 ? 'border-emerald-600 text-emerald-800 bg-white/70 rounded-t-xl shadow-xs'
@@ -980,11 +1199,20 @@ export default function App() {
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>รายงานสรุปผลการตรวจ (Audit Summary Report)</span>
+            {!isLoggedIn && <Lock className="w-3 h-3 text-amber-500" />}
           </button>
 
           {/* Team Management Tab */}
           <button
-            onClick={() => setActiveTab('TEAM')}
+            onClick={() => {
+              if (!isLoggedIn) {
+                setIsLoginModalOpen(true);
+                setToastMessage('🔒 กรุณาเข้าสู่ระบบด้วยอีเมล เพื่อดูทีมงาน Auditor & Auditee');
+                setTimeout(() => setToastMessage(null), 3000);
+                return;
+              }
+              setActiveTab('TEAM');
+            }}
             className={`flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'TEAM'
                 ? 'border-purple-600 text-purple-700 bg-white/70 rounded-t-xl shadow-xs'
@@ -996,6 +1224,7 @@ export default function App() {
             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
               {teamMembers.length}
             </span>
+            {!isLoggedIn && <Lock className="w-3 h-3 text-amber-500" />}
           </button>
         </div>
 
@@ -1069,7 +1298,7 @@ export default function App() {
         {activeTab === 'TEAM' && (
           <TeamManagementTab
             teamMembers={teamMembers}
-            onUpdateTeamMembers={setTeamMembers}
+            onUpdateTeamMembers={handleUpdateTeamMembers}
             items={checklistItems}
             onBulkAssign={handleBulkAssign}
             currentUser={currentUser}
@@ -1135,7 +1364,7 @@ export default function App() {
         isOpen={isTeamModalOpen}
         onClose={() => setIsTeamModalOpen(false)}
         teamMembers={teamMembers}
-        onUpdateTeamMembers={setTeamMembers}
+        onUpdateTeamMembers={handleUpdateTeamMembers}
         items={checklistItems}
         onBulkAssign={handleBulkAssign}
         currentUser={currentUser}

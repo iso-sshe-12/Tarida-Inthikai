@@ -228,19 +228,39 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
     setEvaluatingItemId(item.id);
     const auditeeResp = submissionOverride || item.auditeeResponse;
 
+    const combinedEvidenceText = [
+      auditeeResp?.explanation
+        ? `[คำชี้แจง & หลักฐานจาก Auditee (${auditeeResp.responderName || 'หน่วยงาน'})]: ${auditeeResp.explanation}`
+        : '',
+      item.evidenceRecorded ? `[บันทึกหลักฐานการตรวจ]: ${item.evidenceRecorded}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n') ||
+      'ยังไม่มีการบันทึกหลักฐาน ให้จำลองการสุ่มตรวจตามสภาพความเป็นจริงของลานตู้คอนเทนเนอร์/การขนส่ง KRC';
+
     try {
+      const firstAttachmentBase64 = auditeeResp?.attachments?.[0]?.dataUrl;
+
       const res = await fetch('/api/audit/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           checklistItem: item,
-          evidenceText:
-            item.evidenceRecorded ||
-            (auditeeResp ? `Auditee ชี้แจง: ${auditeeResp.explanation}` : 'ยังไม่มีการบันทึกหลักฐาน ให้จำลองการสุ่มตรวจตามสภาพความเป็นจริงของลานตู้คอนเทนเนอร์/การขนส่ง KRC'),
+          evidenceText: combinedEvidenceText,
+          evidenceImageBase64: firstAttachmentBase64,
           auditeeResponse: auditeeResp,
         }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with ${res.status}`);
+      }
+
       const data = await res.json();
+      if (!data || data.error || !data.status) {
+        throw new Error(data?.error || 'ระบบไม่สามารถประเมินผลได้');
+      }
 
       const newCapData: CapData | undefined = data.capRequired
         ? {
@@ -266,18 +286,19 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
       const updated: AuditItem = {
         ...item,
         status: (data.status as AuditFinding) || item.status,
-        evidenceRecorded: item.evidenceRecorded || data.evidenceRecorded,
+        evidenceRecorded: data.evidenceRecorded || combinedEvidenceText,
         auditorFindingDetail: data.auditorFindingDetail,
         isoClauses: data.isoClauses || item.isoClauses,
         lawReferences: data.lawReferences || item.lawReferences,
         capRequired: data.capRequired,
         capData: newCapData,
+        auditeeResponse: auditeeResp || item.auditeeResponse,
       };
 
       onUpdateItem(updated);
       setExpandedItemId(item.id);
     } catch (err: any) {
-      alert('เกิดข้อผิดพลาดในการประเมิน: ' + err.message);
+      alert('เกิดข้อผิดพลาดในการประเมินหลักฐาน: ' + err.message);
     } finally {
       setEvaluatingItemId(null);
     }
@@ -806,23 +827,29 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (onOpenUploadModalWithDept) {
-                  onOpenUploadModalWithDept(activeDept !== 'ALL' ? activeDept : 'ALL');
-                } else {
-                  onOpenUploadModal();
-                }
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
-            >
-              <UploadCloud className="w-4 h-4 text-blue-100" />
-              <span>
-                {activeDept !== 'ALL'
-                  ? `+ อัปโหลด Checklist ฝ่าย ${activeDept}`
-                  : '+ อัปโหลด Checklist (เลือกฝ่าย)'}
-              </span>
-            </button>
+            {currentUser?.role === 'ADMIN' && (
+              <button
+                onClick={() => {
+                  if (onOpenUploadModalWithDept) {
+                    onOpenUploadModalWithDept(activeDept !== 'ALL' ? activeDept : 'ALL');
+                  } else {
+                    onOpenUploadModal();
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer"
+                title="อัปโหลด Checklist แยกตามฝ่าย (เฉพาะ Admin)"
+              >
+                <UploadCloud className="w-4 h-4 text-blue-100" />
+                <span>
+                  {activeDept !== 'ALL'
+                    ? `+ อัปโหลด Checklist ฝ่าย ${activeDept}`
+                    : '+ อัปโหลด Checklist (เลือกฝ่าย)'}
+                </span>
+                <span className="text-[9px] font-bold px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded">
+                  Admin
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -914,19 +941,25 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
 
               {/* Department Action Buttons */}
               <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    if (onOpenUploadModalWithDept) {
-                      onOpenUploadModalWithDept(currentDeptInfo.id);
-                    } else {
-                      onOpenUploadModal();
-                    }
-                  }}
-                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1.5"
-                >
-                  <UploadCloud className="w-4 h-4 text-blue-100" />
-                  <span>+ อัปโหลด Checklist ฝ่ายนี้</span>
-                </button>
+                {currentUser?.role === 'ADMIN' && (
+                  <button
+                    onClick={() => {
+                      if (onOpenUploadModalWithDept) {
+                        onOpenUploadModalWithDept(currentDeptInfo.id);
+                      } else {
+                        onOpenUploadModal();
+                      }
+                    }}
+                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                    title="เฉพาะ Admin เท่านั้นที่มีสิทธิ์อัปโหลด Checklist"
+                  >
+                    <UploadCloud className="w-4 h-4 text-blue-100" />
+                    <span>+ อัปโหลด Checklist ฝ่ายนี้</span>
+                    <span className="text-[9px] font-bold px-1 py-0.2 bg-amber-400 text-slate-950 rounded">
+                      Admin
+                    </span>
+                  </button>
+                )}
 
                 <button
                   onClick={handleExportToExcel}
@@ -948,7 +981,7 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                   </button>
                 )}
 
-                {(departmentCounts[currentDeptInfo.id] || 0) > 0 && onClearDepartmentItems && (
+                {currentUser?.role === 'ADMIN' && (departmentCounts[currentDeptInfo.id] || 0) > 0 && onClearDepartmentItems && (
                   <button
                     onClick={() => {
                       if (
@@ -960,7 +993,7 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                       }
                     }}
                     className="px-3 py-2 bg-rose-950/60 hover:bg-rose-900 text-rose-200 text-xs font-semibold rounded-xl border border-rose-800/60 transition active:scale-95 cursor-pointer flex items-center gap-1.5"
-                    title="ลบเฉพาะข้อตรวจของฝ่ายนี้"
+                    title="ลบเฉพาะข้อตรวจของฝ่ายนี้ (เฉพาะ Admin)"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-rose-300" />
                     <span>ล้างข้อตรวจฝ่ายนี้</span>
@@ -1004,14 +1037,20 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Upload Button */}
-            <button
-              onClick={onOpenUploadModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
-            >
-              <UploadCloud className="w-4 h-4 text-indigo-200" />
-              <span>อัปโหลด Checklist ใหม่</span>
-            </button>
+            {/* Upload Button - STRICTLY ADMIN ONLY */}
+            {currentUser?.role === 'ADMIN' && (
+              <button
+                onClick={onOpenUploadModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                title="อัปโหลดแบบฟอร์ม Audit Checklist ใหม่ - เฉพาะ Admin เท่านั้น"
+              >
+                <UploadCloud className="w-4 h-4 text-indigo-200" />
+                <span>อัปโหลด Checklist ใหม่</span>
+                <span className="text-[9px] font-bold px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded">
+                  Admin
+                </span>
+              </button>
+            )}
 
             {/* Export to Excel */}
             <button
@@ -1165,19 +1204,28 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                 </p>
               </div>
               <div className="flex items-center justify-center gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    if (onOpenUploadModalWithDept) {
-                      onOpenUploadModalWithDept(currentDeptInfo.id);
-                    } else {
-                      onOpenUploadModal();
-                    }
-                  }}
-                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-2 cursor-pointer"
-                >
-                  <UploadCloud className="w-4 h-4 text-blue-100" />
-                  <span>+ อัปโหลด Checklist ฝ่าย {currentDeptInfo.name}</span>
-                </button>
+                {currentUser?.role === 'ADMIN' ? (
+                  <button
+                    onClick={() => {
+                      if (onOpenUploadModalWithDept) {
+                        onOpenUploadModalWithDept(currentDeptInfo.id);
+                      } else {
+                        onOpenUploadModal();
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-2 cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4 text-blue-100" />
+                    <span>+ อัปโหลด Checklist ฝ่าย {currentDeptInfo.name}</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded">
+                      Admin
+                    </span>
+                  </button>
+                ) : (
+                  <p className="text-xs text-slate-500 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
+                    ℹ️ ยังไม่มีข้อตรวจ &bull; รอผู้ดูแลระบบ (Admin) นำเข้าแบบฟอร์ม Audit Checklist สำหรับฝ่ายนี้
+                  </p>
+                )}
               </div>
             </div>
           ) : items.length === 0 ? (
@@ -1187,20 +1235,31 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
               </div>
               <div className="space-y-1.5 max-w-lg mx-auto">
                 <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                  ระบบลบข้อมูลตัวอย่างทั้งหมดออกเรียบร้อยแล้ว
+                  ระบบพร้อมสำหรับการตรวจติดตามภายใน (Internal Audit)
                 </h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  ขณะนี้ไม่มีข้อตรวจตัวอย่างค้างอยู่ในระบบ คุณสามารถอัปโหลดไฟล์ Checklist (Excel หรือ CSV) ได้ทั้งแบบรวมทุกฝ่าย หรือเลือกนำเข้าแยกเฉพาะแต่ละฝ่าย/แผนก (เช่น IT, Transport, QC, Purchase) ได้ทันที
+                  {currentUser?.role === 'ADMIN'
+                    ? 'ขณะนี้ยังไม่มีข้อตรวจในระบบ คุณสามารถอัปโหลดไฟล์ Checklist (Excel หรือ CSV) ได้ทั้งแบบรวมทุกฝ่าย หรือเลือกนำเข้าแยกเฉพาะแต่ละฝ่าย/แผนก (เช่น IT, Transport, QC, Purchase) ได้ทันที'
+                    : 'ขณะนี้ระบบพร้อมใช้งาน กรุณารอผู้ดูแลระบบ (Admin) นำเข้าแบบฟอร์ม Audit Checklist เพื่อเริ่มต้นการตรวจประเมิน'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                <button
-                  onClick={onOpenUploadModal}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-2 cursor-pointer"
-                >
-                  <UploadCloud className="w-4 h-4 text-blue-100" />
-                  <span>+ อัปโหลดไฟล์ Checklist (Excel / CSV)</span>
-                </button>
+                {currentUser?.role === 'ADMIN' ? (
+                  <button
+                    onClick={onOpenUploadModal}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-2 cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4 text-blue-100" />
+                    <span>+ อัปโหลดไฟล์ Checklist (Excel / CSV)</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded">
+                      Admin
+                    </span>
+                  </button>
+                ) : (
+                  <p className="text-xs text-slate-500 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200">
+                    ℹ️ เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่มีสิทธิ์นำเข้าและอัปโหลด Audit Checklist เข้าสู่ระบบ
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -1541,11 +1600,25 @@ export const ChecklistTab: React.FC<ChecklistTabProps> = ({
                             <button
                               onClick={() => handleAiEvaluate(item)}
                               disabled={isEvaluating}
-                              className="px-2 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-bold rounded-lg shadow-xs transition active:scale-95 cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
-                              title="ให้น้องออดิตช่วยวิเคราะห์และตัดสินผลตรวจ"
+                              className={`px-2 py-1.5 text-white text-[10px] font-bold rounded-lg shadow-xs transition active:scale-95 cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 ${
+                                item.auditeeResponse?.explanation
+                                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 ring-2 ring-emerald-400'
+                                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                              }`}
+                              title={
+                                item.auditeeResponse?.explanation
+                                  ? 'Auditee ส่งหลักฐานแล้ว! คลิกให้น้องออดิตตรวจตัดสินทันที'
+                                  : 'ให้น้องออดิตช่วยวิเคราะห์และตัดสินผลตรวจ'
+                              }
                             >
                               <Sparkles className="w-3 h-3 text-amber-300" />
-                              <span>{isEvaluating ? 'กำลังตรวจ...' : 'น้องออดิต AI'}</span>
+                              <span>
+                                {isEvaluating
+                                  ? 'กำลังตรวจ...'
+                                  : item.auditeeResponse?.explanation
+                                  ? 'ตรวจหลักฐาน ✨'
+                                  : 'น้องออดิต AI'}
+                              </span>
                             </button>
 
                             <button

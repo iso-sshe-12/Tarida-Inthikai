@@ -374,6 +374,74 @@ export async function syncAllSchedulesToSheets(
 }
 
 /**
+ * Send Checklist Items to Audit_Checklist_Master sheet
+ */
+export async function syncChecklistToSheets(
+  webAppUrl: string,
+  items: AuditItem[]
+): Promise<{ success: boolean; message?: string; count?: number }> {
+  try {
+    const checklistMaster = items.map((item) => ({
+      itemNo: item.id,
+      categorySection: item.categoryTitle || 'Checklist',
+      standard: item.isoClauses?.join(', ') || 'ISO 9001/14001/45001',
+      clauseNo: item.requirement || '-',
+      auditQuestion: item.question,
+      targetDept: item.department || 'ลานตู้คอนเทนเนอร์ & การขนส่ง',
+      riskLevel: item.priority === 'HIGH' ? 'High Risk' : 'Normal',
+      relatedDocWi: item.referenceDocs || '-',
+    }));
+
+    const payload = {
+      action: 'syncChecklist',
+      items: checklistMaster,
+    };
+
+    const res = await callSheetsEndpoint(webAppUrl, 'POST', payload);
+    return {
+      success: true,
+      message: res.message || 'บันทึก Checklist ลง Google Sheets (Audit_Checklist_Master) สำเร็จ',
+      count: checklistMaster.length,
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'บันทึก Checklist ลง Google Sheets ไม่สำเร็จ' };
+  }
+}
+
+/**
+ * Send Team Members (Auditor & Auditee) to Users_and_Roles sheet
+ */
+export async function syncUsersToSheets(
+  webAppUrl: string,
+  teamMembers: TeamMember[]
+): Promise<{ success: boolean; message?: string; count?: number }> {
+  try {
+    const users = teamMembers.map((m, idx) => ({
+      userId: m.id || `USR-${idx + 1}`,
+      fullName: m.name,
+      email: m.email,
+      department: m.department,
+      role: m.role,
+      activeStatus: 'Active',
+    }));
+
+    const payload = {
+      action: 'syncUsers',
+      users,
+    };
+
+    const res = await callSheetsEndpoint(webAppUrl, 'POST', payload);
+    return {
+      success: true,
+      message: res.message || 'บันทึกรายชื่อทีมลง Google Sheets (Users_and_Roles) สำเร็จ',
+      count: users.length,
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'บันทึกรายชื่อทีมลง Google Sheets ไม่สำเร็จ' };
+  }
+}
+
+/**
  * Sync entire dashboard state to all 5 sheets in Google Sheets
  */
 export async function syncAllToSheets(
@@ -749,6 +817,39 @@ function doPost(e) {
         });
       }
       return jsonResponse({ status: "success", message: "Synced all schedules to Audit_Schedule_Plan" });
+    }
+
+    if (action === "syncChecklist") {
+      setupChecklistMasterSheet(ss);
+      const sheet = ss.getSheetByName("Audit_Checklist_Master");
+      if (sheet && Array.isArray(body.items)) {
+        if (sheet.getLastRow() > 1) {
+          sheet.deleteRows(2, sheet.getLastRow() - 1);
+        }
+        body.items.forEach(function(item) {
+          sheet.appendRow([
+            item.itemNo, item.categorySection, item.standard, item.clauseNo,
+            item.auditQuestion, item.targetDept, item.riskLevel, item.relatedDocWi
+          ]);
+        });
+      }
+      return jsonResponse({ status: "success", message: "Synced checklist to Audit_Checklist_Master successfully" });
+    }
+
+    if (action === "syncUsers") {
+      setupUsersSheet(ss);
+      const sheet = ss.getSheetByName("Users_and_Roles");
+      if (sheet && Array.isArray(body.users)) {
+        if (sheet.getLastRow() > 1) {
+          sheet.deleteRows(2, sheet.getLastRow() - 1);
+        }
+        body.users.forEach(function(u) {
+          sheet.appendRow([
+            u.userId, u.fullName, u.email, u.department, u.role, u.activeStatus || "Active"
+          ]);
+        });
+      }
+      return jsonResponse({ status: "success", message: "Synced users to Users_and_Roles successfully" });
     }
 
     if (action === "syncAll") {

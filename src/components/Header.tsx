@@ -15,6 +15,7 @@ import {
   LogIn,
   Mail,
   Lock,
+  LogOut,
 } from 'lucide-react';
 import { TeamMember } from '../types/audit';
 
@@ -25,6 +26,8 @@ interface HeaderProps {
   onOpenNotificationModal: () => void;
   onOpenDatabaseModal: () => void;
   onOpenLoginModal?: () => void;
+  onLogout?: () => void;
+  isLoggedIn?: boolean;
   isSheetsConnected?: boolean;
   activeScenarioTitle?: string;
   totalFindingsCount: number;
@@ -41,6 +44,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNotificationModal,
   onOpenDatabaseModal,
   onOpenLoginModal,
+  onLogout,
+  isLoggedIn = true,
   isSheetsConnected = false,
   activeScenarioTitle,
   totalFindingsCount,
@@ -89,142 +94,161 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Controls, Role Switcher, Team & Notification Buttons */}
           <div className="flex items-center flex-wrap gap-2">
-            {/* Login with Email / Switch Account Button */}
-            <button
-              onClick={onOpenLoginModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-98 border border-blue-400/60 text-xs font-bold text-white shadow-sm transition cursor-pointer"
-              title="เข้าสู่ระบบด้วยอีเมลเพื่อรับสิทธิ์ Auditor หรือ Auditee ตามฐานข้อมูล K.R.C."
-            >
-              <LogIn className="w-3.5 h-3.5 text-blue-200" />
-              <span className="hidden sm:inline">เข้าสู่ระบบด้วย Email</span>
-              <span className="sm:hidden">Login Email</span>
-            </button>
-
-            {/* Active User Badge */}
-            <button
-              onClick={onOpenLoginModal || onOpenTeamModal}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition cursor-pointer"
-              title={`คลิกเพื่อสลับผู้ใช้ หรือดูสิทธิ์ (${currentUser.email})`}
-            >
-              <div
-                className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold text-white ${
-                  currentUser.avatarBg || 'bg-indigo-600'
-                }`}
-              >
-                {currentUser.name.charAt(0)}
-              </div>
-              <span className="max-w-[110px] truncate font-semibold">{currentUser.name}</span>
-              <span
-                className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
-                  currentUser.role === 'ADMIN'
-                    ? 'bg-indigo-900/80 text-indigo-300 border-indigo-500/50'
-                    : currentUser.role === 'AUDITOR'
-                    ? 'bg-blue-900/80 text-blue-300 border-blue-500/50'
-                    : 'bg-emerald-900/80 text-emerald-300 border-emerald-500/50'
-                }`}
-              >
-                {currentUser.role}
-              </span>
-            </button>
-
-            {/* Perspective Switcher Pill */}
-            <div className="inline-flex rounded-lg p-0.5 bg-slate-800/90 border border-slate-700 shadow-inner">
+            {!isLoggedIn ? (
               <button
-                onClick={() => onToggleRole('AUDITOR')}
-                className={`px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                  roleMode === 'AUDITOR'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title={
-                  currentUser.role === 'ADMIN'
-                    ? 'Admin: สลับเป็นมุมมองผู้ตรวจประเมิน Lead Auditor'
-                    : 'เข้าใช้งานในมุมมองผู้ตรวจประเมิน (Auditor)'
-                }
+                onClick={onOpenLoginModal}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 active:scale-98 border border-blue-400/80 text-xs font-bold text-white shadow-lg shadow-blue-500/30 transition cursor-pointer ring-2 ring-blue-400/40"
+                title="เข้าสู่ระบบด้วยอีเมลเพื่อรับสิทธิ์ Auditor หรือ Auditee ตามฐานข้อมูล K.R.C."
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
-                <span className="hidden sm:inline">Auditor</span>
+                <LogIn className="w-4 h-4 text-amber-300" />
+                <span>เข้าสู่ระบบ (Login ด้วยอีเมล)</span>
               </button>
+            ) : (
+              <>
+                {/* Active User Badge */}
+                <button
+                  onClick={onOpenLoginModal || onOpenTeamModal}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition cursor-pointer"
+                  title={`คลิกเพื่อสลับผู้ใช้ หรือดูสิทธิ์ (${currentUser.email})`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold text-white ${
+                      currentUser.avatarBg || 'bg-indigo-600'
+                    }`}
+                  >
+                    {currentUser.name.charAt(0)}
+                  </div>
+                  <span className="max-w-[110px] truncate font-semibold">{currentUser.name}</span>
+                  <span
+                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                      currentUser.role === 'ADMIN'
+                        ? 'bg-indigo-900/80 text-indigo-300 border-indigo-500/50'
+                        : currentUser.role === 'AUDITOR'
+                        ? 'bg-blue-900/80 text-blue-300 border-blue-500/50'
+                        : 'bg-emerald-900/80 text-emerald-300 border-emerald-500/50'
+                    }`}
+                  >
+                    {currentUser.role}
+                  </span>
+                </button>
 
-              <button
-                onClick={() => onToggleRole('AUDITEE')}
-                className={`px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                  roleMode === 'AUDITEE'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title={
-                  currentUser.role === 'ADMIN'
-                    ? 'Admin: สลับเป็นมุมมองผู้รับการตรวจ Auditee'
-                    : 'เข้าใช้งานในมุมมองผู้รับการตรวจ (Auditee)'
-                }
-              >
-                <UserCheck className="w-3.5 h-3.5 text-emerald-200" />
-                <span>Auditee</span>
-              </button>
-            </div>
+                {/* Perspective Switcher Pill */}
+                <div className="inline-flex rounded-lg p-0.5 bg-slate-800/90 border border-slate-700 shadow-inner">
+                  <button
+                    onClick={() => onToggleRole('AUDITOR')}
+                    className={`px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      roleMode === 'AUDITOR'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title={
+                      currentUser.role === 'ADMIN'
+                        ? 'Admin: สลับเป็นมุมมองผู้ตรวจประเมิน Lead Auditor'
+                        : 'เข้าใช้งานในมุมมองผู้ตรวจประเมิน (Auditor)'
+                    }
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-200" />
+                    <span className="hidden sm:inline">Auditor</span>
+                  </button>
 
-            {/* Team Management Button */}
-            <button
-              onClick={onOpenTeamModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-900/80 hover:bg-indigo-800 text-indigo-100 text-xs font-bold rounded-lg shadow-xs transition border border-indigo-500/50 cursor-pointer"
-              title="จัดการทีม Auditor & Auditee และมอบหมาย 15 ฝ่าย"
-            >
-              <Users className="w-3.5 h-3.5 text-indigo-300" />
-              <span>ทีม Auditor &amp; Auditee</span>
-            </button>
+                  <button
+                    onClick={() => onToggleRole('AUDITEE')}
+                    className={`px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      roleMode === 'AUDITEE'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                    title={
+                      currentUser.role === 'ADMIN'
+                        ? 'Admin: สลับเป็นมุมมองผู้รับการตรวจ Auditee'
+                        : 'เข้าใช้งานในมุมมองผู้รับการตรวจ (Auditee)'
+                    }
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-200" />
+                    <span>Auditee</span>
+                  </button>
+                </div>
 
-            {/* Notification Settings Button */}
-            <button
-              onClick={onOpenNotificationModal}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg shadow-xs transition border border-slate-700 cursor-pointer"
-              title="ตั้งค่าแจ้งเตือน Google Chat Webhook และ Email"
-            >
-              <Bell className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden md:inline">แจ้งเตือน</span>
-            </button>
+                {/* Team Management Button */}
+                <button
+                  onClick={onOpenTeamModal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-900/80 hover:bg-indigo-800 text-indigo-100 text-xs font-bold rounded-lg shadow-xs transition border border-indigo-500/50 cursor-pointer"
+                  title="จัดการทีม Auditor & Auditee และมอบหมาย 15 ฝ่าย"
+                >
+                  <Users className="w-3.5 h-3.5 text-indigo-300" />
+                  <span className="hidden sm:inline">ทีม</span>
+                </button>
 
-            {/* Database Settings Button (Admin Only) */}
-            {currentUser.role === 'ADMIN' && (
-              <button
-                onClick={onOpenDatabaseModal}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition border cursor-pointer ${
-                  isSheetsConnected
-                    ? 'bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border-emerald-500/50'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                }`}
-                title="ตั้งค่าฐานข้อมูล Google Sheets (KRC_Audit_Database_Master) - เฉพาะ Admin"
-              >
-                <Database className={`w-3.5 h-3.5 ${isSheetsConnected ? 'text-emerald-400' : 'text-blue-300'}`} />
-                <span className="hidden sm:inline">ฐานข้อมูล</span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Admin
-                </span>
-                {isSheetsConnected && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {/* Notification Settings Button */}
+                <button
+                  onClick={onOpenNotificationModal}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg shadow-xs transition border border-slate-700 cursor-pointer"
+                  title="ตั้งค่าแจ้งเตือน Google Chat Webhook และ Email"
+                >
+                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden md:inline">แจ้งเตือน</span>
+                </button>
+
+                {/* Database Settings Button (Admin Only) */}
+                {currentUser.role === 'ADMIN' && (
+                  <button
+                    onClick={onOpenDatabaseModal}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition border cursor-pointer ${
+                      isSheetsConnected
+                        ? 'bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border-emerald-500/50'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                    }`}
+                    title="ตั้งค่าฐานข้อมูล Google Sheets (KRC_Audit_Database_Master) - เฉพาะ Admin"
+                  >
+                    <Database className={`w-3.5 h-3.5 ${isSheetsConnected ? 'text-emerald-400' : 'text-blue-300'}`} />
+                    <span className="hidden sm:inline">ฐานข้อมูล</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Admin
+                    </span>
+                    {isSheetsConnected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    )}
+                  </button>
                 )}
-              </button>
+
+                {/* Upload Checklist Button - STRICTLY ADMIN ONLY as requested */}
+                {currentUser.role === 'ADMIN' && (
+                  <button
+                    onClick={onOpenUploadModal}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-semibold rounded-lg shadow transition-all border border-indigo-400/40 cursor-pointer"
+                    title="อัปโหลดแบบฟอร์ม Audit Checklist (Excel/CSV/PDF/JSON) - เฉพาะ Admin"
+                  >
+                    <UploadCloud className="w-3.5 h-3.5 text-blue-200" />
+                    <span>อัปโหลด</span>
+                    <span className="text-[9px] font-bold px-1 py-0.2 bg-amber-400 text-slate-950 rounded">
+                      Admin
+                    </span>
+                  </button>
+                )}
+
+                {/* Scenario Selector Button */}
+                <button
+                  onClick={onOpenScenarioModal}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-medium rounded-lg shadow transition-all border border-blue-400/30 cursor-pointer"
+                  title="สลับสถานการณ์จำลองการตรวจ"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="hidden sm:inline">{activeScenarioTitle ? 'เคสจำลอง' : 'โหลดเคส'}</span>
+                </button>
+
+                {/* Prominent Red Logout Button */}
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white border border-rose-400/50 text-xs font-bold transition cursor-pointer active:scale-95 shadow-md shadow-rose-900/30"
+                    title="ออกจากระบบ (Logout) และกลับสู่หน้าแรก"
+                  >
+                    <LogOut className="w-3.5 h-3.5 text-white" />
+                    <span>ออกจากระบบ</span>
+                  </button>
+                )}
+              </>
             )}
-
-            {/* Upload Checklist Button */}
-            <button
-              onClick={onOpenUploadModal}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-semibold rounded-lg shadow transition-all border border-indigo-400/40 cursor-pointer"
-              title="อัปโหลดแบบฟอร์ม Audit Checklist (Excel/CSV/PDF/JSON)"
-            >
-              <UploadCloud className="w-3.5 h-3.5 text-blue-200" />
-              <span>อัปโหลด</span>
-            </button>
-
-            {/* Scenario Selector Button */}
-            <button
-              onClick={onOpenScenarioModal}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-medium rounded-lg shadow transition-all border border-blue-400/30 cursor-pointer"
-              title="สลับสถานการณ์จำลองการตรวจ"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>{activeScenarioTitle ? 'เคสจำลอง' : 'โหลดเคส'}</span>
-            </button>
           </div>
         </div>
       </div>

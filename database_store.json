@@ -1,0 +1,227 @@
+{
+  "checklistItems": [],
+  "checklistTitle": "test",
+  "isCustomChecklist": true,
+  "teamMembers": [
+    {
+      "id": "user-admin-1",
+      "name": "ประภาส สันติสุข",
+      "role": "ADMIN",
+      "department": "ฝ่าย QSHE & ระบบบริหารคุณภาพ",
+      "email": "iso-sshe@krctrans.com",
+      "avatarBg": "bg-indigo-600",
+      "assignedCategories": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "user-approver-1",
+      "name": "กิตติศักดิ์ เจริญกิจ",
+      "role": "ADMIN",
+      "department": "ผู้บริหารระดับสูง (President & CEO)",
+      "email": "ceo@krctrans.com",
+      "avatarBg": "bg-slate-800",
+      "assignedCategories": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "user-auditor-ai",
+      "name": "น้องออดิต (AI Lead Auditor)",
+      "role": "AUDITOR",
+      "department": "ทีมตรวจประเมินอิสระ (Lead Auditor)",
+      "email": "nong-audit@krctrans.com",
+      "avatarBg": "bg-blue-600",
+      "assignedCategories": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "user-auditor-safety",
+      "name": "สมบัติ มั่นคง (จป.วิชาชีพ)",
+      "role": "AUDITOR",
+      "department": "ฝ่ายความปลอดภัย อาชีวอนามัย และสิ่งแวดล้อม",
+      "email": "safety@krctrans.com",
+      "avatarBg": "bg-amber-600",
+      "assignedCategories": [
+        "ช",
+        "ฌ"
+      ]
+    },
+    {
+      "id": "user-auditee-depot",
+      "name": "วิชัย ชัยชนะ",
+      "role": "AUDITEE",
+      "department": "Operation - Yard",
+      "email": "depot.sup@krctrans.com",
+      "avatarBg": "bg-emerald-600",
+      "assignedCategories": [
+        "ช",
+        "ซ"
+      ]
+    },
+    {
+      "id": "user-auditee-transport",
+      "name": "อนุชา ขับขี่ปลอดภัย",
+      "role": "AUDITEE",
+      "department": "Transport",
+      "email": "transport.sup@krctrans.com",
+      "avatarBg": "bg-teal-600",
+      "assignedCategories": [
+        "ฌ"
+      ]
+    },
+    {
+      "id": "user-auditee-it",
+      "name": "กมล ไอทีซิสเต็มส์",
+      "role": "AUDITEE",
+      "department": "IT",
+      "email": "it.support@krctrans.com",
+      "avatarBg": "bg-cyan-600",
+      "assignedCategories": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "user-auditee-hr",
+      "name": "นภาพร บริหารบุคคล",
+      "role": "AUDITEE",
+      "department": "HR & GA",
+      "email": "hr.manager@krctrans.com",
+      "avatarBg": "bg-rose-600",
+      "assignedCategories": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "user-auditee-purchase",
+      "name": "ชัญญา จัดซื้อพัสดุ",
+      "role": "AUDITEE",
+      "department": "Purchase",
+      "email": "purchase@krctrans.com",
+      "avatarBg": "bg-amber-700",
+      "assignedCategories": [
+        "P-PU-001",
+        "P-PU-002"
+      ]
+    },
+    {
+      "id": "user-auditee-survey",
+      "name": "เกรียงไกร สำรวจตู้",
+      "role": "AUDITEE",
+      "department": "Operation - Survey",
+      "email": "survey.gate@krctrans.com",
+      "avatarBg": "bg-sky-600",
+      "assignedCategories": [
+        "ALL"
+      ]
+    },
+    {
+      "id": "user-auditee-vendor",
+      "name": "ตัวแทนผู้รับเหมาซ่อมตู้และพ่นสี",
+      "role": "AUDITEE",
+      "department": "ผู้รับเหมาช่วงประจำลาน (Contractor P-PU-002)",
+      "email": "vendor.contractor@service.com",
+      "avatarBg": "bg-orange-600",
+      "assignedCategories": [
+        "ซ"
+      ]
+    }
+  ],
+  "auditSchedule": [
+    {
+      "id": "AUD-SCH-001",
+      "date": "2026-10-14",
+      "timeSlot": "08:30 – 09:00 น.",
+      "department": "Opening Meeting",
+      "location": "ห้องประชุมใหญ่ Executive Meeting Room",
+      "scope": "ประชุมเปิดการตรวจติดตามภายใน ประจำปี 2569 ชี้แจงวัตถุประสงค์และกำหนดการตรวจทุกฝ่าย",
+      "isoClauses": [
+        "ISO 9001: 9.2",
+        "ISO 14001: 9.2",
+        "ISO 45001: 9.2"
+      ],
+      "leadAuditor": "All Auditors",
+      "auditTeam": "All Team 1-4 & Auditees",
+      "auditeeName": "ผู้บริหารและตัวแทนทุกฝ่าย/แผนก (K.R.C.)",
+      "referenceDocs": "แผนการตรวจ Internal Audit Plan 2569",
+      "status": "COMPLETED",
+      "notes": "เปิดการตรวจอย่างเป็นทางการโดยผู้บริหารระดับสูงและ Lead Auditor"
+    },
+    {
+      "id": "AUD-SCH-002",
+      "date": "2026-10-14",
+      "timeSlot": "09:00 – 10:00 น.",
+      "department": "Management",
+      "location": "ห้องผู้บริหาร ชั้น 3 อาคารบริหาร",
+      "scope": "นโยบายคุณภาพ สิ่งแวดล้อม ความปลอดภัย, บริบทองค์กร (Context 4.1), ทะเบียนความเสี่ยง (6.1) และผลกระทบ Climate Change",
+      "isoClauses": [
+        "ISO 9001: 5.1, 5.2, 6.1",
+        "ISO 14001: 5.1, 6.1",
+        "ISO 45001: 5.1, 6.1"
+      ],
+      "leadAuditor": "K.Thayarat (ACC)",
+      "auditTeam": "Team 3: K.Thayarat (ACC), K.Tharnarnuth (WH)",
+      "auditeeName": "Management / ฝ่ายบริหาร K.R.C.",
+      "referenceDocs": "คู่มือระบบบริหารคุณภาพ QM, นโยบาย SHEQ",
+      "status": "IN_PROGRESS",
+      "notes": "ทบทวนประเด็น Climate Change (Amd 1:2024) ต่อธุรกิจขนส่งและลานตู้"
+    },
+    {
+      "id": "AUD-SCH-003",
+      "date": "2026-10-14",
+      "timeSlot": "10:00 – 11:30 น.",
+      "department": "IT",
+      "location": "ห้องศูนย์ข้อมูล IT & Server Room",
+      "scope": "การสำรองข้อมูล (Data Backup & Recovery), ความมั่นคงปลอดภัยสารสนเทศ, การควบคุมสิทธิ์ระบบ Yard Management System (YMS)",
+      "isoClauses": [
+        "ISO 9001: 7.1.3, 7.1.5",
+        "ISO 27001 Guidelines"
+      ],
+      "leadAuditor": "K.Chakkrit (QSHE)",
+      "auditTeam": "Team 1: K.Chakkrit (QSHE), K.Chanyarat (PU)",
+      "auditeeName": "IT Supervisor / เจ้าหน้าที่ระบบสารสนเทศ",
+      "referenceDocs": "WI-IT-001, IT Disaster Recovery Plan",
+      "status": "PLANNED",
+      "notes": "สุ่มตรวจบันทึกการสำรองข้อมูลประจำสัปดาห์/เดือน และการทดสอบกู้คืนระบบ"
+    },
+    {
+      "id": "AUD-SCH-004",
+      "date": "2026-10-14",
+      "timeSlot": "10:00 – 11:30 น.",
+      "department": "Operation - QA",
+      "location": "สำนักงานควบคุมคุณภาพลานตู้ & จุดตรวจรับตู้",
+      "scope": "การประกันคุณภาพการตรวจสภาพตู้คอนเทนเนอร์, มาตรฐาน IICL, เกณฑ์การประเมินความเสียหาย, การควบคุมบันทึกคุณภาพ",
+      "isoClauses": [
+        "ISO 9001: 8.5.1, 8.6",
+        "ISO 45001: 8.1.2"
+      ],
+      "leadAuditor": "K.Tarida (QSHE)",
+      "auditTeam": "Team 2: K.Tarida (QSHE), K.Wiroj (QSHE)",
+      "auditeeName": "Operation - QA Supervisor",
+      "referenceDocs": "WI-QA-001, มาตรฐานสากล IICL-5/6",
+      "status": "PLANNED",
+      "notes": "สุ่มตรวจรายงานการตรวจรับสภาพตู้ และเกณฑ์การสุ่มตรวจซ้ำ (Re-inspection)"
+    },
+    {
+      "id": "AUD-SCH-005",
+      "date": "2026-10-14",
+      "timeSlot": "13:30 – 15:30 น.",
+      "department": "Transport",
+      "location": "ศูนย์ปฏิบัติการขนส่ง & จุดปล่อยรถหัวลาก",
+      "scope": "การควบคุมสุขภาพพนักงานขับรถ: บันทึกเป่าแอลกอฮอล์/สารเสพติด 100%, ผลตรวจวัดความดันโลหิต (เกิน 140/90 ต้องพัก 15 นาที), ตรวจเช็กลมยางและ GPS",
+      "isoClauses": [
+        "ISO 9001: 8.5.1",
+        "ISO 14001: 8.1",
+        "ISO 45001: 8.1.2, 8.2"
+      ],
+      "leadAuditor": "K.Chakkrit (QSHE)",
+      "auditTeam": "Team 1: K.Chakkrit (QSHE), K.Chanyarat (PU)",
+      "auditeeName": "Transport Supervisor & Fleet Manager",
+      "referenceDocs": "WI-TR-001, นโยบายตรวจสุขภาพ พขร., แบบฟอร์มตรวจความพร้อม พขร.",
+      "status": "PLANNED",
+      "notes": "จุดสกัดกั้นความเสี่ยงหลัก: หากความดันเกิน 140/90 ต้องสั่งพัก 15 นาทีแล้ววัดซ้ำ"
+    }
+  ],
+  "lastUpdated": "2026-10-02T03:31:16.597Z"
+}
